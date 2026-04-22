@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel — Dinas Koperasi UKM</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="assets/css/admin-global.css">
+    <link rel="stylesheet" href="assets/css/admin-sidebar.css">
+    <script src="auth.js"></script>
+    <script src="assets/js/toast.js"></script>
+    <script src="assets/js/confirm-modal.js"></script>
+    <script src="assets/js/sidebar.js"></script>
+    <style>
+        .admin-section {
+            display: none;
+        }
+
+        .admin-section.active {
+            display: block;
+        }
+
+        /* SPJ status bar */
+        .spj-status-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            background: #fef3c7;
+            border: 1px solid #fbbf24;
+            font-size: 13px;
+            color: #92400e;
+        }
+
+        .spj-status-bar.success {
+            background: #d1fae5;
+            border-color: #6ee7b7;
+            color: #065f46;
+        }
+
+        .spj-status-bar.error {
+            background: #fee2e2;
+            border-color: #fca5a5;
+            color: #991b1b;
+        }
+
+        /* Dashboard chart helpers */
+        .chart-wrap {
+            position: relative;
+        }
+
+        .chart-wrap.h-380 {
+            height: 380px;
+        }
+
+        .chart-wrap.h-300 {
+            height: 300px;
+        }
+
+        .chart-wrap.h-230 {
+            height: 230px;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .chart-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .chart-tab {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            color: #64748b;
+        }
+
+        .chart-tab.active {
+            background: #0f172a;
+            color: #fff;
+            border-color: #0f172a;
+        }
+
+        .banner {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            background: linear-gradient(135deg, #0f172a, #1e3a5f);
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-bottom: 24px;
+            color: #fff;
+        }
+
+        .banner-left {
+            flex: 1;
+        }
+
+        .banner-title {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .banner-sub {
+            font-size: 12px;
+            opacity: .7;
+            margin-top: 4px;
+        }
+
+        .banner-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, .12);
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 12px;
+        }
+
+        .pill-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .cat-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .cat-btn {
+            padding: 7px 14px;
+            border-radius: 6px;
+            border: none;
+            background: #f1f5f9;
+            color: #64748b;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .cat-btn:hover {
+            background: #e2e8f0;
+        }
+
+        .month-selector {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .month-selector select {
+            padding: 6px 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 13px;
+        }
+
+        /* Rekap table chips */
+        .chip {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .chip-great {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .chip-good {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .chip-fair {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .chip-poor {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .chip-none {
+            background: #f1f5f9;
+            color: #94a3b8;
+        }
+
+        .total-chip {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .total-great {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .total-good {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .total-fair {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .total-poor {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .total-none {
+            background: #f1f5f9;
+            color: #94a3b8;
+        }
+
+        .rank-badge {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #f1f5f9;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
+            text-align: center;
+            line-height: 24px;
+        }
+
+        .prog-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 120px;
+        }
+
+        .prog-bar {
+            flex: 1;
+            height: 6px;
+            background: #f1f5f9;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .prog-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width .3s;
+        }
+
+        .prog-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #64748b;
+            width: 32px;
+        }
+
+        .table-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            padding: 12px 16px;
+            border-top: 1px solid #f1f5f9;
+            font-size: 12px;
+        }
+
+        .leg-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .leg-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+
+        .rekap {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .rekap th,
+        .rekap td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 13px;
+        }
+
+        .rekap th {
+            background: #f8fafc;
+            font-weight: 600;
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .rekap td.center,
+        .rekap th.center {
+            text-align: center;
+        }
+
+        .sk {
+            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+            background-size: 200% 100%;
+            animation: sk 1.5s infinite;
+            border-radius: 6px;
+        }
+
+        @keyframes sk {
+            0% {
+                background-position: 200% 0;
+            }
+
+            100% {
+                background-position: -200% 0;
+            }
+        }
+
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #f1f5f9;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .section-note {
+            font-size: 13px;
+            color: #64748b;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        /* Section loader */
+        .section-loader {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 300px;
+            color: #94a3b8;
+            flex-direction: column;
+            gap: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+        <svg viewBox="0 0 24 24">
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+    </button>
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileMenu()"></div>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-header-content">
+                <div class="sidebar-icon">
+                    <img src="https://yt3.googleusercontent.com/ytc/AIdro_lAD91TqpEoBLA60qxJfjXPWjPJG1qCHBRz8ZomYP_tkA=s900-c-k-c0x00ffffff-no-rj"
+                        alt="Logo" style="width:40px;height:40px;object-fit:cover;border-radius:8px;">
+                </div>
+                <div>
+                    <div class="sidebar-title">Admin Panel</div>
+                    <div class="sidebar-subtitle">Dinas Koperasi UKM</div>
+                </div>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="#" class="nav-item" data-section="dashboard" onclick="showSection('dashboard');return false;">
+                <svg class="nav-icon" viewBox="0 0 24 24">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <rect x="14" y="14" width="7" height="7" rx="1" />
+                </svg>
+                Dashboard
+            </a>
+            <a href="#" class="nav-item" data-section="requests" onclick="showSection('requests');return false;">
+                <svg class="nav-icon" viewBox="0 0 24 24">
+                    <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                    <path d="M14 3v6h6" />
+                </svg>
+                Kendaraan Dinas
+            </a>
+            <a href="#" class="nav-item" data-section="ruang-rapat" onclick="showSection('ruang-rapat');return false;">
+                <svg class="nav-icon" viewBox="0 0 24 24">
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                Ruang Rapat
+            </a>
+            <a href="#" class="nav-item" data-section="voucher-bbm" onclick="showSection('voucher-bbm');return false;">
+                <svg class="nav-icon" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 6v6l4 2" />
+                </svg>
+                Voucher BBM
+            </a>
+            <a href="#" class="nav-item" data-section="diklat" onclick="showSection('diklat');return false;">
+                <svg class="nav-icon" viewBox="0 0 24 24">
+                    <path d="M22 10v7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h10m6-2h6v6m-6-6L12 12" />
+                </svg>
+                Diklat
+            </a>
+            <a href="#" class="nav-item" data-section="kearsipan" onclick="showSection('kearsipan');return false;">
+                <svg class="nav-icon" viewBox="0 0 24 24">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                </svg>
+                Kearsipan Internal
+            </a>
+            <a href="#" class="nav-item" data-section="spj-keuangan"
+                onclick="showSection('spj-keuangan');return false;">
+                <svg class="nav-icon" viewBox="0 0 24 24">
+                    <line x1="12" y1="1" x2="12" y2="23" />
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+                Penilaian SPJ Keuangan
+            </a>
+            <a href="#" class="nav-item" data-section="spj-pengumpulan"
+                onclick="showSection('spj-pengumpulan');return false;">
+                <svg class="nav-icon" viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                </svg>
+                Pengumpulan SPJ
+            </a>
+            <a href="#" class="nav-item" data-section="pengajuan-dana"
+                onclick="showSection('pengajuan-dana');return false;">
+                <svg class="nav-icon" viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="18" x2="12" y2="12" />
+                    <line x1="9" y1="15" x2="15" y2="15" />
+                </svg>
+                Pengajuan Dana
+            </a>
+            <a href="#" class="nav-item" data-section="monev" onclick="showSection('monev');return false;">
+                <svg class="nav-icon" viewBox="0 0 24 24">
+                    <path d="M9 11l3 3L22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                </svg>
+                Penilaian Monev
+            </a>
+            <a href="#" class="nav-item" data-section="penilaian-orang" onclick="showSection('penilaian-orang');return false;">
+                <svg class="nav-icon" viewBox="0 0 24 24">
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M4 21a8 8 0 0 1 16 0" />
+                    <path d="M17 11l1.5 1.5L22 9" />
+                </svg>
+                Penilaian Per Orang
+            </a>
+            <a href="#" class="nav-item" data-section="manageacc" onclick="showSection('manageacc');return false;">
+                <svg class="nav-icon" viewBox="0 0 24 24">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+                Manajemen Akun
+            </a>
+            <a href="#" class="nav-item" data-section="ganti-password"
+                onclick="showSection('ganti-password');return false;">
+                <svg class="nav-icon" viewBox="0 0 24 24">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                Ganti Password
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-name" id="adminName">Administrator</div>
+                <div class="user-email" id="adminEmail">admin@dinas.gov.id</div>
+            </div>
+            <button onclick="logout()" class="logout-btn">
+                <svg class="nav-icon" viewBox="0 0 24 24">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                Keluar
+            </button>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+
+        <!-- ═══════════════════════════════════ -->
+        <!-- SECTION: DASHBOARD                  -->
+        <!-- ═══════════════════════════════════ -->
+        <div id="section-dashboard" class="admin-section">
+            <div class="header">
+                <div class="header-left">
+                    <h1 class="header-title" id="pageTitle">Dashboard</h1>
+                    <p class="header-subtitle" id="db-headerDate">—</p>
+                </div>
+                <div class="header-right" id="headerActions"></div>
+            </div>
+            <div class="container">
+
+                <!-- SPJ Status Bar -->
+                <div id="db-spjStatusBar" class="spj-status-bar" style="display:none">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <span id="db-spjStatusMsg"></span>
+                </div>
+
+                <!-- Banner -->
+                <div class="banner">
+                    <div class="banner-left">
+                        <div class="banner-title">Sistem Penilaian Kinerja — Total Maksimal 100 Poin</div>
+                        <div class="banner-sub">BBM /5 + Kendaraan /10 + Ruang Rapat /5 + Kearsipan /5 + SPJ Keuangan
+                            /35 + Monev /40 = 100</div>
+                    </div>
+                    <div class="banner-pills">
+                        <div class="pill">
+                            <div class="pill-dot" style="background:#0ea5e9"></div>BBM /5
+                        </div>
+                        <div class="pill">
+                            <div class="pill-dot" style="background:#f59e0b"></div>Kendaraan /10
+                        </div>
+                        <div class="pill">
+                            <div class="pill-dot" style="background:#8b5cf6"></div>Ruang Rapat /5
+                        </div>
+                        <div class="pill">
+                            <div class="pill-dot" style="background:#22c55e"></div>Kearsipan /5
+                        </div>
+                        <div class="pill">
+                            <div class="pill-dot" style="background:#10b981"></div>SPJ Keuangan /35
+                        </div>
+                        <div class="pill">
+                            <div class="pill-dot" style="background:#ec4899"></div>Monev /40
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filter bar -->
+                <div
+                    style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+                    <div class="month-selector">
+                        <label style="font-size:13px;font-weight:600;color:#64748b;">Bulan:</label>
+                        <select id="db-bulanSelect" onchange="dbOnBulanChange()">
+                            <option value="JANUARI">Januari</option>
+                            <option value="FEBRUARI">Februari</option>
+                            <option value="MARET">Maret</option>
+                            <option value="APRIL">April</option>
+                            <option value="MEI">Mei</option>
+                            <option value="JUNI">Juni</option>
+                            <option value="JULI">Juli</option>
+                            <option value="AGUSTUS">Agustus</option>
+                            <option value="SEPTEMBER">September</option>
+                            <option value="OKTOBER">Oktober</option>
+                            <option value="NOVEMBER">November</option>
+                            <option value="DESEMBER">Desember</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" id="db-btnRefresh" onclick="dbLoadAll()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5">
+                            <path d="M23 4v6h-6" />
+                            <path d="M1 20v-6h6" />
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                        </svg>
+                        Refresh
+                    </button>
+                </div>
+
+                <!-- Stats grid -->
+                <div class="stats-grid" id="db-statsGrid">
+                    <div class="stat-card">
+                        <div class="sk" style="height:72px"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="sk" style="height:72px"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="sk" style="height:72px"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="sk" style="height:72px"></div>
+                    </div>
+                </div>
+
+                <!-- Chart section header -->
+                <div class="section-head">
+                    <span class="section-title">Grafik Perbandingan Nilai</span>
+                    <span class="section-note" id="db-sectionNote">—</span>
+                </div>
+
+                <!-- Chart tabs -->
+                <div class="chart-tabs">
+                    <button class="chart-tab active" onclick="dbGoTab('total',this)">📊 Total per Divisi</button>
+                    <button class="chart-tab" onclick="dbGoTab('trend',this)">📈 Tren Bulanan</button>
+                    <button class="chart-tab" onclick="dbGoTab('cat',this)">🔍 Per Kategori</button>
+                    <button class="chart-tab" onclick="dbGoTab('profil',this)">🎯 Profil Divisi</button>
+                </div>
+
+                <!-- Panel: Total -->
+                <div id="db-pTotal" data-active="1">
+                    <div class="grid-2">
+                        <div class="card">
+                            <div class="card-header">
+                                <span class="card-title">Total Nilai per Divisi (Stacked)</span>
+                                <span class="card-note" id="db-stkNote">—</span>
+                            </div>
+                            <div class="card-content">
+                                <div class="chart-wrap h-380"><canvas id="db-cStacked"></canvas></div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header">
+                                <span class="card-title">Distribusi Modul (Radar)</span>
+                                <span class="card-note">Rata-rata semua divisi %</span>
+                            </div>
+                            <div class="card-content">
+                                <div class="chart-wrap h-380"><canvas id="db-cRadarMain"></canvas></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel: Tren -->
+                <div id="db-pTrend" style="display:none">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Tren Total Nilai Lintas Bulan — per Divisi</span>
+                            <span class="card-note">Semua 12 bulan, nilai /100</span>
+                        </div>
+                        <div class="card-content">
+                            <div class="chart-wrap h-380"><canvas id="db-cTrend"></canvas></div>
+                        </div>
+                    </div>
+                    <div class="section-head">
+                        <span class="section-title">Tren per Divisi — Detail Modul</span>
+                        <span class="section-note">Semua modul stacked per bulan</span>
+                    </div>
+                    <div class="grid-3" id="db-trendSmall"></div>
+                </div>
+
+                <!-- Panel: Per Kategori -->
+                <div id="db-pCat" style="display:none">
+                    <div class="section-head" style="margin-bottom:10px">
+                        <span class="section-title">Pilih Kategori Penilaian:</span>
+                    </div>
+                    <div class="cat-row" id="db-catRow"></div>
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title" id="db-catTitle">—</span>
+                            <span class="card-note" id="db-catNote">—</span>
+                        </div>
+                        <div class="card-content">
+                            <div class="chart-wrap h-380"><canvas id="db-cCat"></canvas></div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title" id="db-catTitle2">—</span>
+                            <span class="card-note">Lintas bulan tiap divisi</span>
+                        </div>
+                        <div class="card-content">
+                            <div class="chart-wrap h-300"><canvas id="db-cCat2"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel: Profil Divisi -->
+                <div id="db-pProfil" style="display:none">
+                    <div class="grid-3" id="db-radarGrid"></div>
+                </div>
+
+                <!-- Rekap tabel -->
+                <div class="section-head">
+                    <span class="section-title">Rekap Nilai Lengkap per Divisi</span>
+                    <span class="section-note">Diurutkan berdasarkan total nilai tertinggi</span>
+                </div>
+
+                <div class="card" style="margin-bottom:32px">
+
+                    <!-- Tabel (desktop) -->
+                    <div class="table-container" id="db-rekapTableWrap">
+                        <table class="rekap" id="db-rekapTable">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Divisi / Unit</th>
+                                    <th class="center"><span style="color:#0ea5e9">●</span> BBM <small
+                                            style="opacity:.6">/5</small></th>
+                                    <th class="center"><span style="color:#f59e0b">●</span> Kendaraan <small
+                                            style="opacity:.6">/10</small></th>
+                                    <th class="center"><span style="color:#8b5cf6">●</span> Ruang Rapat <small
+                                            style="opacity:.6">/5</small></th>
+                                    <th class="center"><span style="color:#22c55e">●</span> Kearsipan <small
+                                            style="opacity:.6">/5</small></th>
+                                    <th class="center"><span style="color:#10b981">●</span> SPJ Keuangan <small
+                                            style="opacity:.6">/35</small></th>
+                                    <th class="center"><span style="color:#ec4899">●</span> Monev <small
+                                            style="opacity:.6">/40</small></th>
+                                    <th class="center" style="background:#1a2942">Total <small
+                                            style="opacity:.6">/100</small></th>
+                                    <th class="center">Progress /100</th>
+                                </tr>
+                            </thead>
+                            <tbody id="db-rekapTbody">
+                                <tr>
+                                    <td colspan="10" class="empty-state">⏳ Memuat data...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Cards mobile (pengganti tabel di HP) -->
+                    <div id="db-rekapCards"></div>
+
+                    <!-- Legend -->
+                    <div class="table-legend">
+                        <div class="leg-item">
+                            <div class="leg-dot" style="background:#d1fae5"></div>Sangat Baik ≥80%
+                        </div>
+                        <div class="leg-item">
+                            <div class="leg-dot" style="background:#dbeafe"></div>Baik ≥60%
+                        </div>
+                        <div class="leg-item">
+                            <div class="leg-dot" style="background:#fef3c7"></div>Cukup ≥40%
+                        </div>
+                        <div class="leg-item">
+                            <div class="leg-dot" style="background:#fee2e2"></div>Kurang &lt;40%
+                        </div>
+                        <div class="leg-item" style="margin-left:auto;color:#94a3b8;font-style:italic">
+                            Sumber SPJ: <span id="db-spjSourceLabel">—</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════ -->
+        <!-- SECTION: KENDARAAN DINAS            -->
+        <!-- ═══════════════════════════════════ -->
+        <div id="section-requests" class="admin-section">
+            <div class="section-loader">
+                <div class="spinner"></div><span>Memuat Kendaraan Dinas...</span>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════ -->
+        <!-- SECTION: RUANG RAPAT                -->
+        <!-- ═══════════════════════════════════ -->
+        <div id="section-ruang-rapat" class="admin-section">
+            <div class="section-loader">
+                <div class="spinner"></div><span>Memuat Ruang Rapat...</span>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════ -->
+        <!-- SECTION: VOUCHER BBM                -->
+        <!-- ═══════════════════════════════════ -->
+        <div id="section-voucher-bbm" class="admin-section">
+            <div class="section-loader">
+                <div class="spinner"></div><span>Memuat Voucher BBM...</span>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════ -->
+        <!-- SECTION: DIKLAT                     -->
+        <!-- ═══════════════════════════════════ -->
+        <div id="section-diklat" class="admin-section">
+            <div class="section-loader">
+                <div class="spinner"></div><span>Memuat Diklat...</span>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════ -->
+        <!-- SECTION: KEARSIPAN                  -->
+        <!-- ═══════════════════════════════════ -->
+        <div id="section-kearsipan" class="admin-section">
+            <div class="section-loader">
+                <div class="spinner"></div><span>Memuat Kearsipan Internal...</span>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════ -->
+        <!-- SECTION: SPJ KEUANGAN               -->
+        <!-- ═══════════════════════════════════ -->
+        <div id="section-spj-keuangan" class="admin-section">
+            <div class="section-loader">
+                <div class="spinner"></div><span>Memuat Penilaian SPJ Keuangan...</span>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════ -->
+        <!-- SECTION: SPJ PENGUMPULAN            -->
+        <!-- ═══════════════════════════════════ -->
+        <div id="section-spj-pengumpulan" class="admin-section">
+            <div class="section-loader">
+                <div class="spinner"></div><span>Memuat Pengumpulan SPJ...</span>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════ -->
+        <!-- SECTION: PENGAJUAN DANA             -->
+        <!-- ═══════════════════════════════════ -->
+        <div id="section-pengajuan-dana" class="admin-section">
+            <div class="section-loader">
+                <div class="spinner"></div><span>Memuat Pengajuan Dana...</span>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════ -->
+        <!-- SECTION: MONEV                      -->
+        <!-- ═══════════════════════════════════ -->
+        <div id="section-monev" class="admin-section">
+            <div class="section-loader">
+                <div class="spinner"></div><span>Memuat Penilaian Monev...</span>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════ -->
+        <!-- SECTION: PENILAIAN PER ORANG       -->
+        <!-- ═══════════════════════════════════ -->
+        <div id="section-penilaian-orang" class="admin-section">
+            <div class="section-loader">
+                <div class="spinner"></div><span>Memuat Penilaian Per Orang...</span>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════ -->
+        <!-- SECTION: MANAJEMEN AKUN             -->
+        <!-- ═══════════════════════════════════ -->
+        <div id="section-manageacc" class="admin-section">
+            <div class="section-loader">
+                <div class="spinner"></div><span>Memuat Manajemen Akun...</span>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════ -->
+        <!-- SECTION: GANTI PASSWORD             -->
+        <!-- ═══════════════════════════════════ -->
+        <div id="section-ganti-password" class="admin-section">
+            <div class="section-loader">
+                <div class="spinner"></div><span>Memuat Ganti Password...</span>
+            </div>
+        </div>
+
+    </div><!-- end .main-content -->
+
+    <!-- Scripts: urutan penting — app.js (router) harus sebelum section JS -->
+    <script src="assets/js/app.js"></script>
+    <script src="assets/js/dashboard.js"></script>
+    <script src="assets/js/sub-umum/requests.js" defer></script>
+    <script src="assets/js/sub-umum/ruang-rapat.js" defer></script>
+    <script src="assets/js/sub-umum/voucher-bbm.js" defer></script>
+    <script src="assets/js/sub-umum/diklat.js" defer></script>
+    <script src="assets/js/sub-umum/kearsipan.js" defer></script>
+    <script src="assets/js/sub-keuangan/spj-keuangan.js" defer></script>
+    <script src="assets/js/sub-keuangan/spj-pengumpulan.js" defer></script>
+    <script src="assets/js/sub-keuangan/pengajuan-dana.js" defer></script>
+    <script src="assets/js/sub-keuangan/pengajuan-dana-bersama.js" defer></script>
+    <script src="assets/js/sekretariat/monev.js" defer></script>
+    <script src="assets/js/penilaian-individu/penilaian-orang-gas-integration.js" defer></script>
+    <script src="assets/js/penilaian-individu/penilaian-orang.js" defer></script>
+    <script src="assets/js/manageacc.js" defer></script>
+    <script src="assets/js/gantipassword.js" defer></script>
+    <script>
+        AUTH.init();
+    </script>
+</body>
+
+</html>

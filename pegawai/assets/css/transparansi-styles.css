@@ -1,0 +1,566 @@
+/* ================================================================
+   TRANSPARANSI NILAI STYLES — UNIFIED EDITION
+   Palet: biru gelap (#1a1a2e / #0f3460) + gold (#c5a572)
+   ================================================================ */
+
+/* ── Header section transparansi ──────────────────────────── */
+.transparansi-header {
+    text-align: center;
+    margin-bottom: 48px;
+}
+
+.transparansi-header h2 {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--text-dark);
+    margin-bottom: 12px;
+}
+
+.transparansi-header p {
+    color: var(--text-light);
+    font-size: 1rem;
+}
+
+/* ── Empty / error state ───────────────────────────────────── */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-light);
+}
+
+.empty-state h3 {
+    font-size: 1.5rem;
+    color: var(--text-dark);
+    margin: 20px 0 10px;
+}
+
+/* ── Chart header — SERAGAM ────────────────────────────────── */
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 20px 24px;
+    background: var(--bg-light);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+}
+
+.chart-header h3 {
+    font-size: 1.375rem;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin: 0;
+}
+
+.chart-header p {
+    color: var(--text-light);
+    font-size: 0.875rem;
+    margin: 4px 0 0;
+}
+
+/* ── Month selector ─────────────────────────────────────────── */
+.month-selector {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.month-selector label {
+    font-weight: 600;
+    color: var(--text-dark);
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.month-selector select {
+    padding: 10px 32px 10px 14px;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background-color: var(--white);
+    cursor: pointer;
+    transition: border-color .3s, box-shadow .3s;
+    min-width: 150px;
+    color: var(--text-dark);
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23c5a572' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+}
+
+.month-selector select:focus {
+    outline: none;
+    border-color: var(--gold);
+    box-shadow: 0 0 0 4px rgba(197, 165, 114, 0.1);
+}
+
+/* ── Chart containers ──────────────────────────────────────── */
+.chart-container {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    height: 360px;
+    position: relative;
+    /* Subtle inner glow — efek premium */
+    box-shadow:
+        inset 0 1px 0 rgba(197, 165, 114, 0.06),
+        0 2px 12px rgba(26, 26, 46, 0.04);
+}
+
+/* Ornamen garis emas tipis di atas chart container */
+.chart-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 24px;
+    right: 24px;
+    height: 2px;
+    background: linear-gradient(90deg,
+            transparent 0%,
+            rgba(197, 165, 114, 0.3) 20%,
+            rgba(197, 165, 114, 0.6) 50%,
+            rgba(197, 165, 114, 0.3) 80%,
+            transparent 100%);
+    border-radius: 0 0 2px 2px;
+}
+
+.chart-container-small {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    height: 280px;
+    position: relative;
+    box-shadow: 0 2px 8px rgba(26, 26, 46, 0.04);
+}
+
+.chart-container-small::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 16px;
+    right: 16px;
+    height: 2px;
+    background: linear-gradient(90deg,
+            transparent 0%,
+            rgba(197, 165, 114, 0.25) 30%,
+            rgba(197, 165, 114, 0.5) 50%,
+            rgba(197, 165, 114, 0.25) 70%,
+            transparent 100%);
+}
+
+/* ── Dual grid (kendaraan) ─────────────────────────────────── */
+.dual-chart-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.chart-section {
+    background: var(--bg-light);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid var(--border);
+}
+
+.chart-section h4 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border);
+}
+
+/* ── Table compact ───────────────────────────────────────────── */
+.table-compact {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.table-compact table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table-compact thead {
+    /* Gradient biru gelap di header tabel */
+    background: linear-gradient(90deg, #1a1a2e 0%, #0f3460 100%);
+}
+
+.table-compact th {
+    padding: 14px 12px;
+    text-align: left;
+    font-weight: 700;
+    /* Teks emas di header */
+    color: #c5a572;
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    border-bottom: none;
+}
+
+.table-compact td {
+    padding: 14px 12px;
+    font-size: 0.9rem;
+    color: var(--text-dark);
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+}
+
+.table-compact tbody tr:hover {
+    background: rgba(197, 165, 114, 0.04);
+}
+
+.table-compact tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Baris pertama (rank 1) punya aksen tipis di kiri */
+.table-compact tbody tr:first-child td:first-child {
+    position: relative;
+}
+
+.table-compact tbody tr:first-child td:first-child::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 20%;
+    bottom: 20%;
+    width: 3px;
+    background: linear-gradient(180deg, #c5a572, #a8885a);
+    border-radius: 0 2px 2px 0;
+}
+
+/* ── Nilai color classes ─────────────────────────────────────── */
+.nilai-excellent {
+    color: var(--success);
+    font-weight: 700;
+}
+
+.nilai-good {
+    color: #3b82f6;
+    font-weight: 700;
+}
+
+.nilai-fair {
+    color: var(--warning);
+    font-weight: 700;
+}
+
+.nilai-poor {
+    color: var(--error);
+    font-weight: 700;
+}
+
+/* ── Rank badge ─────────────────────────────────────────────── */
+/* Shared base untuk semua rank badge — pakai min-width bukan width
+   supaya tetap bulat meski angka 2 digit (10, 11, dst.) */
+.rank-badge-1,
+.rank-badge-2,
+.rank-badge-3,
+.rank-badge-n {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    width: 28px;
+    height: 28px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.rank-badge-1 {
+    background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+    color: #c5a572;
+    box-shadow: 0 2px 8px rgba(15, 52, 96, 0.35);
+}
+
+.rank-badge-2 {
+    background: linear-gradient(135deg, #c8d0d8 0%, #9aa5b0 100%);
+    color: var(--white);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.rank-badge-3 {
+    background: linear-gradient(135deg, #c5a572 0%, #a8885a 100%);
+    color: var(--white);
+    box-shadow: 0 2px 8px rgba(197, 165, 114, 0.35);
+}
+
+.rank-badge-n {
+    background: var(--border);
+    color: var(--text-dark);
+}
+
+/* ── Top 3 card ─────────────────────────────────────────────── */
+.tp-top-card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    transition: all .3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dekorasi corner gold tiap card */
+.tp-top-card::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    right: -1px;
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(225deg, rgba(197, 165, 114, 0.12) 0%, transparent 60%);
+    border-radius: 0 0 16px 0;
+    pointer-events: none;
+}
+
+.tp-top-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 0;
+    background: linear-gradient(180deg, #c5a572, #a8885a);
+    transition: height .35s ease;
+}
+
+.tp-top-card:hover {
+    border-color: rgba(197, 165, 114, 0.5);
+    box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.08),
+        0 0 0 1px rgba(197, 165, 114, 0.15);
+    transform: translateY(-4px);
+}
+
+.tp-top-card:hover::before {
+    height: 100%;
+}
+
+/* Strip warna atas per rank */
+.tp-top-card-rank-1 {
+    border-top: 3px solid transparent;
+    border-image: linear-gradient(90deg, #1a1a2e 0%, #0f3460 50%, #c5a572 100%) 1;
+    /* fallback */
+    border-top: 3px solid #0f3460;
+}
+
+.tp-top-card-rank-2 {
+    border-top: 3px solid #b0b8c1;
+}
+
+.tp-top-card-rank-3 {
+    border-top: 3px solid #c5a572;
+}
+
+/* ── Tombol retry ─────────────────────────────────────────── */
+.btn-retry {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 16px;
+    padding: 14px 32px;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+    color: var(--white);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    box-shadow: 0 4px 16px rgba(26, 26, 46, 0.2);
+    transition: box-shadow .3s, transform .3s;
+}
+
+.btn-retry:hover {
+    box-shadow: 0 8px 24px rgba(26, 26, 46, 0.3);
+    transform: translateY(-2px);
+}
+
+/* ── Tombol bukti Monev ──────────────────────────────────── */
+.btn-bukti {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    background: rgba(197, 165, 114, 0.08);
+    border: 1.5px solid var(--gold);
+    border-radius: 8px;
+    color: #8a6e3e;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    text-decoration: none;
+    transition: background .2s, color .2s, box-shadow .2s;
+    white-space: nowrap;
+}
+
+.btn-bukti:hover {
+    background: linear-gradient(135deg, #c5a572, #a8885a);
+    color: var(--white);
+    border-color: #a8885a;
+    box-shadow: 0 4px 12px rgba(197, 165, 114, 0.3);
+}
+
+/* ── Chip status ─────────────────────────────────────────── */
+.chip-tepat {
+    background: #d1fae5;
+    color: var(--success);
+    padding: 2px 10px;
+    border-radius: 99px;
+    font-size: .75rem;
+    font-weight: 600;
+}
+
+.chip-terlambat {
+    background: #fee2e2;
+    color: var(--error);
+    padding: 2px 10px;
+    border-radius: 99px;
+    font-size: .75rem;
+    font-weight: 600;
+}
+
+/* ── Progress bar ────────────────────────────────────────── */
+.tp-progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tp-progress-track {
+    flex: 1;
+    background: var(--border);
+    border-radius: 99px;
+    height: 7px;
+    overflow: hidden;
+}
+
+.tp-progress-fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width .5s ease;
+    position: relative;
+}
+
+/* Shimmer khusus progress bar excellent (nilai >= 90%) */
+.tp-progress-fill.tp-progress-shimmer {
+    background: linear-gradient(90deg,
+            #1a1a2e 0%,
+            #0f3460 40%,
+            #c5a572 70%,
+            #1a1a2e 100%) !important;
+    background-size: 200% 100% !important;
+    animation: progressShimmer 2.5s linear infinite;
+}
+
+@keyframes progressShimmer {
+    0% {
+        background-position: 200% center;
+    }
+
+    100% {
+        background-position: -200% center;
+    }
+}
+
+.tp-progress-label {
+    font-size: 11px;
+    color: var(--text-light);
+    min-width: 32px;
+    text-align: right;
+    font-weight: 600;
+}
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+    .dual-chart-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .chart-header {
+        flex-direction: column;
+        gap: 14px;
+        text-align: center;
+    }
+
+    .month-selector {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .transparansi-header h2 {
+        font-size: 1.5rem;
+    }
+
+    .chart-container {
+        height: 280px;
+        padding: 14px;
+    }
+
+    .chart-container-small {
+        height: 220px;
+        padding: 12px;
+    }
+
+    .chart-section {
+        padding: 14px;
+    }
+
+    .table-compact th,
+    .table-compact td {
+        padding: 10px 8px;
+        font-size: 0.8125rem;
+    }
+
+    .month-selector select {
+        min-width: 120px;
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .chart-header {
+        padding: 14px;
+    }
+
+    .chart-header h3 {
+        font-size: 1.0625rem;
+    }
+
+    .chart-container {
+        height: 240px;
+        padding: 10px;
+    }
+
+    .chart-container-small {
+        height: 190px;
+        padding: 10px;
+    }
+
+    .table-compact th,
+    .table-compact td {
+        padding: 8px 6px;
+        font-size: 0.75rem;
+    }
+}

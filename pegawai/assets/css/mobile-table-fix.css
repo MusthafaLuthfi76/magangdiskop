@@ -1,0 +1,63 @@
+/* ============================================================
+   MOBILE TABLE HORIZONTAL SCROLL FIX
+   Tabel terpotong di mobile kini bisa digeser kiri-kanan
+   ============================================================ */
+
+/* Wrapper yang diinjeksi oleh wrapTablesForMobile() di main.js */
+.table-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    /* Scroll-shadow hint: bayangan kanan menandakan ada konten */
+    background:
+        linear-gradient(to right, #fff 8px, transparent 8px),
+        linear-gradient(to left,  #fff 8px, transparent 8px) 100% 0,
+        radial-gradient(farthest-side at 0 50%, rgba(0,0,0,.07), transparent),
+        radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,.07), transparent) 100% 0;
+    background-repeat: no-repeat;
+    background-color: #fff;
+    background-size: 32px 100%, 32px 100%, 12px 100%, 12px 100%;
+    background-attachment: local, local, scroll, scroll;
+}
+
+@media (max-width: 768px) {
+    /* Tabel ringkasan beranda (10 kolom) */
+    #summary-container .table-scroll-wrapper table {
+        min-width: 780px;
+    }
+
+    /* Tabel transparansi SPJ keuangan */
+    #nilai-content .table-compact .table-scroll-wrapper table {
+        min-width: 720px;
+    }
+
+    /* Tabel kendaraan, monev, dll */
+    .table-compact .table-scroll-wrapper table {
+        min-width: 560px;
+    }
+
+    /* Jangan biarkan sel wrap sembarangan */
+    .table-compact th {
+        white-space: nowrap;
+    }
+
+    /* Kolom Unit Kerja / nama boleh wrap */
+    .table-compact th:nth-child(2),
+    .table-compact td:nth-child(2) {
+        white-space: normal;
+        min-width: 110px;
+        max-width: 160px;
+    }
+}
+
+@media (max-width: 480px) {
+    #summary-container .table-scroll-wrapper table {
+        min-width: 680px;
+    }
+
+    .table-compact th,
+    .table-compact td {
+        font-size: 0.75rem;
+        padding: 9px 7px;
+    }
+}

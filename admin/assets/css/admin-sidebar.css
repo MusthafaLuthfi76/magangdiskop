@@ -1,0 +1,297 @@
+/* ============================================================
+   ADMIN SIDEBAR CSS
+   Dinas Koperasi dan UKM DIY
+   ============================================================ */
+
+/* ---- Mobile Menu Toggle ---- */
+.mobile-menu-toggle {
+    display: none;
+    position: fixed;
+    top: 20px;
+    left: 16px;
+    z-index: 1100;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 8px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+/* Sembunyikan tombol hamburger saat sidebar terbuka */
+.mobile-menu-toggle.sidebar-open {
+    display: none;
+}
+
+.mobile-menu-toggle svg {
+    width: 20px;
+    height: 20px;
+    stroke: #1e293b;
+    fill: none;
+    stroke-width: 2.5;
+    display: block;
+}
+
+/* ---- Tombol Close di dalam Sidebar Header (mobile only) ---- */
+.sidebar-close-btn {
+    display: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    color: #64748b;
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.sidebar-close-btn svg {
+    width: 20px;
+    height: 20px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    display: block;
+}
+
+.sidebar-close-btn:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+/* ---- Sidebar Overlay (mobile) ---- */
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+
+/* ---- Sidebar ---- */
+.sidebar {
+    width: 252px;
+    background: white;
+    border-right: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    height: 100vh;
+    left: 0;
+    top: 0;
+    z-index: 1000;
+    transition: transform 0.3s ease;
+    overflow: hidden;
+}
+
+/* ---- Sidebar Header ---- */
+.sidebar-header {
+    padding: 20px 16px;
+    border-bottom: 1px solid #e5e7eb;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.sidebar-header-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+}
+
+.sidebar-icon {
+    width: 40px;
+    height: 40px;
+    background: #0f172a;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.sidebar-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e293b;
+    line-height: 1.2;
+}
+
+.sidebar-subtitle {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 1px;
+}
+
+/* ---- Sidebar Navigation ---- */
+.sidebar-nav {
+    flex: 1;
+    padding: 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #e5e7eb transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+    background: #e5e7eb;
+    border-radius: 4px;
+}
+
+/* ---- Nav Group Label ---- */
+.nav-group-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #94a3b8;
+    padding: 8px 16px 4px;
+    margin-top: 4px;
+}
+
+/* ---- Nav Item ---- */
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-weight: 500;
+    font-size: 14px;
+    color: #374151;
+    text-decoration: none;
+    position: relative;
+    transition: all 0.15s ease;
+    cursor: pointer;
+}
+
+.nav-item:hover {
+    background: #f8fafc;
+    color: #1e293b;
+}
+
+.nav-item.active {
+    background: #f1f5f9;
+    color: #0f172a;
+    font-weight: 600;
+}
+
+.nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    background: #0f172a;
+    border-radius: 0 3px 3px 0;
+}
+
+/* ---- Nav Icon ---- */
+.nav-icon {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.8;
+    flex-shrink: 0;
+}
+
+/* ---- Sidebar Footer ---- */
+.sidebar-footer {
+    padding: 16px 12px;
+    border-top: 1px solid #e5e7eb;
+    flex-shrink: 0;
+}
+
+/* ---- User Info ---- */
+.user-info {
+    padding: 0 4px;
+    margin-bottom: 12px;
+}
+
+.user-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-email {
+    font-size: 12px;
+    color: #64748b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---- Logout Button ---- */
+.logout-btn {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: white;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: #1e293b;
+    font-family: 'Inter', sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.15s;
+}
+
+.logout-btn:hover {
+    background: #fef2f2;
+    color: #dc2626;
+    border-color: #fca5a5;
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 1023px) {
+    .mobile-menu-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .sidebar {
+        transform: translateX(-100%);
+    }
+
+    .sidebar.open {
+        transform: translateX(0);
+    }
+
+    .sidebar-overlay.active {
+        display: block;
+    }
+
+    /* Tampilkan tombol ✕ di dalam sidebar header saat mobile */
+    .sidebar-close-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
