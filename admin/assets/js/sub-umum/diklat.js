@@ -13,7 +13,7 @@
 (function () {
     'use strict';
 
-    const API_URL = 'https://script.google.com/macros/s/AKfycbxsdAlN0gLea0f9iA9h5R8VTZJtIBK_JJxFwzP_TbP5lPNCq4oylR5rD6gPB5sshMjwlg/exec';
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxNQCq-3r2xBQvug2uzlgGzUSm9FGNnXgoZjJKLzmZpw-BltRPUoCP8gFw8Ke2SV1Z8Eg/exec';
 
     const QUARTERS = [
         { key: 'triwulan1', label: 'Triwulan I',   sub: 'Jan – Mar', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', dot: '#3b82f6', gradient: 'linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)' },

@@ -7,7 +7,7 @@
 (function () {
     'use strict';
 
-    const API_URL = 'https://script.google.com/macros/s/AKfycbxsdAlN0gLea0f9iA9h5R8VTZJtIBK_JJxFwzP_TbP5lPNCq4oylR5rD6gPB5sshMjwlg/exec';
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxNQCq-3r2xBQvug2uzlgGzUSm9FGNnXgoZjJKLzmZpw-BltRPUoCP8gFw8Ke2SV1Z8Eg/exec';
     const CACHE_DURATION = 5 * 60 * 1000;
     const CACHE_KEYS = { REQUESTS: 'kendaraan_requests', VIOLATIONS: 'kendaraan_violations', SCORES: 'kendaraan_scores' };
 
