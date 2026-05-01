@@ -6,7 +6,7 @@
 (function () {
     'use strict';
 
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwn6AO1g22y9_WeIoBXJ69nE5cvVRldyQsTSk5Hmc36PWRFU86pWGJ8NN5ZNeDHsaLU6A/exec';
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyuQaHsIxxtmnTr4cPuyUQzdvdr23_3wK59JIF8VYA1ihhBm4ZeD3A0qzpginmmA9d-ng/exec';
 
     const UNITS = [
         "Balai Layanan Usaha Terpadu KUMKM", "Bidang Kewirausahaan", "Bidang Koperasi",

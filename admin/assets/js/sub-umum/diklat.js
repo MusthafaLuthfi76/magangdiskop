@@ -13,7 +13,7 @@
 (function () {
     'use strict';
 
-    const API_URL = 'https://script.google.com/macros/s/AKfycbxsdAlN0gLea0f9iA9h5R8VTZJtIBK_JJxFwzP_TbP5lPNCq4oylR5rD6gPB5sshMjwlg/exec';
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxNQCq-3r2xBQvug2uzlgGzUSm9FGNnXgoZjJKLzmZpw-BltRPUoCP8gFw8Ke2SV1Z8Eg/exec';
 
     const QUARTERS = [
         { key: 'triwulan1', label: 'Triwulan I',   sub: 'Jan – Mar', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', dot: '#3b82f6', gradient: 'linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)' },
@@ -1210,12 +1210,11 @@
 
 <!-- ── MODAL: FORM UPLOAD ── -->
 <div id="dklat-formModal" class="modal-overlay" onclick="if(event.target===this)diklatCloseModal('dklat-formModal')">
-    <div class="modal" style="max-width:700px;border-radius:18px;overflow:hidden;">
+    <div class="modal" style="max-width:700px;border-radius:18px;overflow:hidden;display:flex;flex-direction:column;max-height:90vh;">
         <div class="modal-header" style="background:linear-gradient(135deg,#1e293b,#334155);padding:20px 24px;">
             <h2 class="modal-title" id="dklat-modal-title" style="color:#fff;font-size:16px;font-weight:700;">Upload Bukti Diklat</h2>
         </div>
-        <div class="modal-content" style="padding:24px;">
-
+            <div class="modal-content" style="padding:24px;overflow-y:auto;flex:1;">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:22px;">
                 <div class="form-group" style="margin:0;">
                     <label class="input-label" style="font-weight:600;color:#475569;font-size:12px;text-transform:uppercase;letter-spacing:.04em;">Nama Peserta <span style="color:#ef4444;">*</span></label>
@@ -1263,12 +1262,11 @@
 
 <!-- ── MODAL: DETAIL ── -->
 <div id="dklat-detailModal" class="modal-overlay" onclick="if(event.target===this)diklatCloseModal('dklat-detailModal')">
-    <div class="modal" style="max-width:660px;border-radius:18px;overflow:hidden;">
+    <div class="modal" style="max-width:660px;border-radius:18px;overflow:hidden;display:flex;flex-direction:column;max-height:90vh;">
         <div class="modal-header" style="background:linear-gradient(135deg,#1e293b,#334155);padding:20px 24px;">
             <h2 class="modal-title" style="color:#fff;font-size:16px;font-weight:700;">Detail Diklat</h2>
         </div>
-        <div class="modal-content" style="padding:24px;" id="dklat-detail-body"></div>
-        <div class="modal-footer" style="padding:16px 24px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+        <div class="modal-content" style="padding:24px;overflow-y:auto;flex:1;" id="dklat-detail-body"></div>        <div class="modal-footer" style="padding:16px 24px;background:#f8fafc;border-top:1px solid #e2e8f0;">
             <button onclick="diklatCloseModal('dklat-detailModal')" class="btn" style="flex:1;border-radius:10px;">Tutup</button>
         </div>
     </div>

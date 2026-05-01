@@ -8,11 +8,13 @@
 //   4. UI diperbaiki: role cards, badge, avatar konsisten
 //   5. [FIX] Default role fallback diubah dari 'subumum' ke 'subkendaraan'
 //   6. [FIX] Semua role baru terdaftar dengan benar
+//   7. [FIX UTAMA] gasRequest diganti dengan flat-param JSONP agar role
+//      tidak corrupt saat dikirim ke GAS (mencegah "Error: Role tidak valid")
 // ============================================================
 (function () {
     'use strict';
 
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzabqfFCmZGQ-gRhWMlazSXwnRICNdfu5zT9qzWyXVnAeHAeSVLzzPLcCaC-IAnKXq7/exec';
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbxNQCq-3r2xBQvug2uzlgGzUSm9FGNnXgoZjJKLzmZpw-BltRPUoCP8gFw8Ke2SV1Z8Eg/exec';
     const STYLE_ID = 'acc-section-styles';
 
     const ROLES = {
@@ -212,7 +214,11 @@
         document.head.appendChild(style);
     }
 
-    // ── JSONP wrappers ─────────────────────────────────────
+    // ── JSONP helper (flat params — TIDAK pakai jsonBody) ──────────────
+    // Ini adalah fix utama: semua field dikirim sebagai query param biasa,
+    // bukan di-encode ke jsonBody, sehingga GAS menerimanya dengan benar
+    // dan tidak ada risiko double-decode yang merusak nilai field seperti
+    // penilai_sekretariat, penilai_blut, dll.
     function gasGet(params) {
         return new Promise((resolve, reject) => {
             const cb = '__gas_' + Date.now() + '_' + Math.floor(Math.random() * 9999);
@@ -227,48 +233,11 @@
         });
     }
 
+    // ── gasRequest: sekarang pakai flat params, BUKAN jsonBody ────────────
+    // Ini menggantikan implementasi lama yang pakai jsonBody dan menyebabkan
+    // role seperti penilai_sekretariat tidak terbaca dengan benar di GAS.
     function gasRequest(payload) {
-        return new Promise((resolve, reject) => {
-            const cb = '__gas_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            const body = encodeURIComponent(JSON.stringify(payload));
-            const url = `${GAS_URL}?jsonBody=${body}&callback=${cb}`;
-            const script = document.createElement('script');
-            let done = false;
-
-            const cleanup = () => {
-                done = true;
-                try { delete window[cb]; } catch (e) { }
-                try { if (script.parentNode) script.parentNode.removeChild(script); } catch (e) { }
-            };
-
-            window[cb] = data => {
-                if (done) return;
-                cleanup();
-                resolve(data);
-            };
-
-            const timer = setTimeout(() => {
-                if (done) return;
-                cleanup();
-                reject(new Error('Request timeout (15s)'));
-            }, 15000);
-
-            script.onerror = () => {
-                if (done) return;
-                clearTimeout(timer);
-                cleanup();
-                reject(new Error('Gagal terhubung ke server'));
-            };
-
-            const origCb = window[cb];
-            window[cb] = data => {
-                clearTimeout(timer);
-                origCb(data);
-            };
-
-            document.head.appendChild(script);
-            script.src = url;
-        });
+        return gasGet(payload);
     }
 
     // ── Load Users ─────────────────────────────────────────
@@ -456,7 +425,7 @@
         } else {
             document.getElementById('acc-f-name').value = '';
             document.getElementById('acc-f-email').value = '';
-            // [FIX] Default role adalah 'subkendaraan', bukan 'subumum'
+            // [FIX] Default role adalah 'subkendaraan'
             const def = document.querySelector('#section-manageacc input[name="acc-role"][value="subkendaraan"]');
             if (def) def.checked = true;
         }
@@ -467,11 +436,11 @@
 
     window.accSaveAccount = async function () {
         accClearErrs();
-        const name = document.getElementById('acc-f-name').value.trim();
-        const email = document.getElementById('acc-f-email').value.trim();
+        const name     = document.getElementById('acc-f-name').value.trim();
+        const email    = document.getElementById('acc-f-email').value.trim();
         const password = document.getElementById('acc-f-password').value;
-        // [FIX] Default fallback diubah dari 'subumum' ke 'subkendaraan'
-        const role = document.querySelector('#section-manageacc input[name="acc-role"]:checked')?.value || 'subkendaraan';
+        // [FIX] Default fallback ke 'subkendaraan'
+        const role     = document.querySelector('#section-manageacc input[name="acc-role"]:checked')?.value || 'subkendaraan';
         let valid = true;
 
         if (!name) { accShowErr('acc-e-name', 'acc-f-name'); valid = false; }
@@ -480,7 +449,7 @@
         if (editingId && password && password.length < 8) { accShowErr('acc-e-password', 'acc-f-password'); valid = false; }
         if (!valid) return;
 
-        const btn = document.getElementById('acc-btn-save');
+        const btn  = document.getElementById('acc-btn-save');
         const orig = btn.innerHTML;
         const savedId = editingId;
 
@@ -492,12 +461,15 @@
         try {
             let payload;
             if (savedId) {
+                // UPDATE — kirim sebagai flat params
                 payload = { action: 'updateUser', id: savedId, name, email, role };
                 if (password) payload.password = await sha256(password);
             } else {
+                // CREATE — kirim sebagai flat params
                 payload = { action: 'createUser', name, email, password: await sha256(password), role };
             }
 
+            // gasRequest sekarang = gasGet (flat params), tidak ada jsonBody
             const res = await gasRequest(payload);
 
             if (res.status === 'success') {

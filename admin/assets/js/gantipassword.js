@@ -12,7 +12,7 @@
 (function () {
     'use strict';
 
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzabqfFCmZGQ-gRhWMlazSXwnRICNdfu5zT9qzWyXVnAeHAeSVLzzPLcCaC-IAnKXq7/exec';
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbxNQCq-3r2xBQvug2uzlgGzUSm9FGNnXgoZjJKLzmZpw-BltRPUoCP8gFw8Ke2SV1Z8Eg/exec';
     const STYLE_ID = 'ganti-password-styles';
 
     // ── SHA-256 (Web Crypto API) ─────────────────────────────

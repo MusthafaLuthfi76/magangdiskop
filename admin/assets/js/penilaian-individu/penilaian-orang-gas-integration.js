@@ -20,13 +20,13 @@
         url: 'https://script.google.com/macros/s/AKfycbwHOeuxIolhlJheHWqKXcHBfPivW6Mgt5HCr3E5vrWhAZ-bMvLjUcWAYPsLoYTeld5bZQ/exec',
 
         // URL GAS Operasional (BBM, Kendaraan, Ruang Rapat, Kearsipan)
-        urlOperasional: 'https://script.google.com/macros/s/AKfycbxsdAlN0gLea0f9iA9h5R8VTZJtIBK_JJxFwzP_TbP5lPNCq4oylR5rD6gPB5sshMjwlg/exec',
+        urlOperasional: 'https://script.google.com/macros/s/AKfycbxNQCq-3r2xBQvug2uzlgGzUSm9FGNnXgoZjJKLzmZpw-BltRPUoCP8gFw8Ke2SV1Z8Eg/exec',
 
         // URL GAS SPJ Keuangan
-        urlSPJ: 'https://script.google.com/macros/s/AKfycbxrlBOq5yyUH-FSX6s1g_4feGVeJNJVNP_5vw7fAW4VdHrGxdwZgBnb_0rIomtXgw-U/exec',
+        urlSPJ: 'https://script.google.com/macros/s/AKfycbw8U7fNHneCo2Mi-nWdP-oeeRl8JYydgyMD_ghmepNt4onT8XPixOVF3GQFWqIsVRkb/exec',
 
         // URL GAS Monev
-        urlMonev: 'https://script.google.com/macros/s/AKfycbwn6AO1g22y9_WeIoBXJ69nE5cvVRldyQsTSk5Hmc36PWRFU86pWGJ8NN5ZNeDHsaLU6A/exec',
+        urlMonev: 'https://script.google.com/macros/s/AKfycbyuQaHsIxxtmnTr4cPuyUQzdvdr23_3wK59JIF8VYA1ihhBm4ZeD3A0qzpginmmA9d-ng/exec',
     };
 
     // ── Nama unit yang sesuai dengan semua API ──

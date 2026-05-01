@@ -5,7 +5,7 @@
 (function () {
     'use strict';
 
-    const API_URL = 'https://script.google.com/macros/s/AKfycbxsdAlN0gLea0f9iA9h5R8VTZJtIBK_JJxFwzP_TbP5lPNCq4oylR5rD6gPB5sshMjwlg/exec';
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxNQCq-3r2xBQvug2uzlgGzUSm9FGNnXgoZjJKLzmZpw-BltRPUoCP8gFw8Ke2SV1Z8Eg/exec';
     const CACHE_DURATION = 5 * 60 * 1000;
     const CACHE_KEYS = {
         REQUESTS: 'bbm_voucher_requests',
@@ -1052,7 +1052,10 @@
 
     function renderApprovedReqList(filter = '') {
         const list = document.getElementById('bbm-approved-req-list'); if (!list) return;
-        const approved = masterRequests.filter(r => (r.status || '').toUpperCase() === 'APPROVED');
+        const approved = masterRequests.filter(r => {
+            const s = (r.status || '').toUpperCase();
+            return s === 'APPROVED' || s === 'COMPLETED';
+        });
         const filtered = filter
             ? approved.filter(r => `${r.nama_pegawai} ${r.unit_eselon} ${r.nomor_kendaraan || ''}`.toLowerCase().includes(filter.toLowerCase()))
             : approved;
@@ -1062,7 +1065,14 @@
                 <div class="req-pick-check">${selectedApprovedReq?.id === r.id ? ICONS.check : ''}</div>
                 <div style="flex:1;min-width:0;">
                     <div class="req-pick-name">${r.nama_pegawai || '-'}</div>
-                    <div class="req-pick-meta">${r.unit_eselon || '-'} &nbsp;·&nbsp; <span style="font-size:11px;background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">${r.nomor_kendaraan || '-'}</span></div>
+                    <div class="req-pick-meta">${r.unit_eselon || '-'} &nbsp;·&nbsp; 
+                        <span style="font-size:11px;background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">${r.nomor_kendaraan || '-'}</span>
+                        &nbsp;·&nbsp;
+                        <span style="font-size:11px;padding:1px 7px;border-radius:10px;font-weight:600;
+                            ${(r.status||'').toUpperCase()==='COMPLETED' ? 'background:#dbeafe;color:#1d4ed8;' : 'background:#dcfce7;color:#15803d;'}">
+                            ${(r.status||'').toUpperCase()==='COMPLETED' ? 'Selesai' : 'Disetujui'}
+                        </span>
+                    </div>
                     <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${r.timestamp || ''}</div>
                 </div>
             </div>`).join('');

@@ -1,7 +1,7 @@
 // ============================================
 // GOOGLE APPS SCRIPT CONFIGURATION
 // ============================================
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzabqfFCmZGQ-gRhWMlazSXwnRICNdfu5zT9qzWyXVnAeHAeSVLzzPLcCaC-IAnKXq7/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyx6trw8pln9JPe-aH2GVQdsjf5v2ioR4iSCJAA_AJ1rH4at1F_R_uAnp0CkRnF3SqTxQ/exec";
 
 // ============================================
 // KONFIGURASI WHATSAPP & HELPER
