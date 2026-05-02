@@ -17,7 +17,7 @@
     // ── URL Google Apps Script — SESUAIKAN DENGAN DEPLOYMENT ANDA ──
     window.PPO_GAS_CONFIG = {
         // URL GAS untuk Penilaian Per Orang (sheet PenilaianOrang)
-        url: 'https://script.google.com/macros/s/AKfycbwHOeuxIolhlJheHWqKXcHBfPivW6Mgt5HCr3E5vrWhAZ-bMvLjUcWAYPsLoYTeld5bZQ/exec',
+        url: 'https://script.google.com/macros/s/AKfycbzhf7jO8TdVg5Q1xV1ZIE11cVlKfOTSUwlaZdZAZvA36nzNTsqzWEci3UQwmHRKHauv-g/exec',
 
         // URL GAS Operasional (BBM, Kendaraan, Ruang Rapat, Kearsipan)
         urlOperasional: 'https://script.google.com/macros/s/AKfycbxNQCq-3r2xBQvug2uzlgGzUSm9FGNnXgoZjJKLzmZpw-BltRPUoCP8gFw8Ke2SV1Z8Eg/exec',

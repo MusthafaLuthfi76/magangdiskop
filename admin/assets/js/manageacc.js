@@ -95,10 +95,14 @@
     let editingId = null;
 
     const AV_COLORS = ['#3b82f6', '#8b5cf6', '#ef4444', '#f59e0b', '#10b981', '#ec4899', '#0ea5e9', '#14b8a6', '#f97316'];
-    function avColor(email) {
+    function avColor(identifier) {
+        identifier = String(identifier ?? '');
         let h = 0;
-        for (const c of (email || '')) h = (h << 5) - h + c.charCodeAt(0);
+        for (const c of identifier) h = (h << 5) - h + c.charCodeAt(0);
         return AV_COLORS[Math.abs(h) % AV_COLORS.length];
+    }
+    function getUserNip(user) {
+        return String(user?.nip ?? user?.email ?? '').trim();
     }
     function initials(name) {
         return (name || '').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
@@ -266,7 +270,7 @@
         const q = (document.getElementById('acc-searchQ')?.value || '').trim().toLowerCase();
         const role = document.getElementById('acc-fltRole')?.value || '';
         filteredUsers = allUsers.filter(u => {
-            const mQ = !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+            const mQ = !q || u.name.toLowerCase().includes(q) || getUserNip(u).toLowerCase().includes(q);
             const mR = !role || u.role === role;
             return mQ && mR;
         });
@@ -317,10 +321,10 @@
                 <td style="color:#94a3b8;font-weight:600;font-size:12px;width:40px;">${no}</td>
                 <td>
                     <div class="acc-user-cell">
-                        <div class="acc-avatar" style="background:${avColor(u.email)}">${initials(u.name)}</div>
+                                <div class="acc-avatar" style="background:${avColor(getUserNip(u))}">${initials(u.name)}</div>
                         <div>
                             <div class="acc-user-name">${esc(u.name)}</div>
-                            <div class="acc-user-email">${esc(u.email)}</div>
+                                    <div class="acc-user-email">${esc(getUserNip(u))}</div>
                             <div class="acc-user-id">${esc(u.id)}</div>
                         </div>
                     </div>
@@ -355,10 +359,10 @@
                 return `<div class="documents-card" style="margin-bottom:12px;">
                     <div class="documents-card-header">
                         <div style="display:flex;align-items:center;gap:10px;flex:1;">
-                            <div class="acc-avatar" style="background:${avColor(u.email)}">${initials(u.name)}</div>
+                            <div class="acc-avatar" style="background:${avColor(getUserNip(u))}">${initials(u.name)}</div>
                             <div>
                                 <div class="documents-card-title">${esc(u.name)}</div>
-                                <div class="documents-card-subtitle">${esc(u.email)}</div>
+                                <div class="documents-card-subtitle">${esc(getUserNip(u))}</div>
                             </div>
                         </div>
                         <span class="acc-role-badge" style="color:${r.color};background:${r.bg};border-color:${r.border};">${r.icon} ${r.label}</span>
@@ -419,12 +423,12 @@
             if (!u) return;
             editingId = id;
             document.getElementById('acc-f-name').value = u.name;
-            document.getElementById('acc-f-email').value = u.email;
+            document.getElementById('acc-f-nip').value = getUserNip(u);
             const r = document.querySelector(`#section-manageacc input[name="acc-role"][value="${u.role}"]`);
             if (r) r.checked = true;
         } else {
             document.getElementById('acc-f-name').value = '';
-            document.getElementById('acc-f-email').value = '';
+            document.getElementById('acc-f-nip').value = '';
             // [FIX] Default role adalah 'subkendaraan'
             const def = document.querySelector('#section-manageacc input[name="acc-role"][value="subkendaraan"]');
             if (def) def.checked = true;
@@ -437,14 +441,14 @@
     window.accSaveAccount = async function () {
         accClearErrs();
         const name     = document.getElementById('acc-f-name').value.trim();
-        const email    = document.getElementById('acc-f-email').value.trim();
+        const nip      = document.getElementById('acc-f-nip').value.trim();
         const password = document.getElementById('acc-f-password').value;
         // [FIX] Default fallback ke 'subkendaraan'
         const role     = document.querySelector('#section-manageacc input[name="acc-role"]:checked')?.value || 'subkendaraan';
         let valid = true;
 
         if (!name) { accShowErr('acc-e-name', 'acc-f-name'); valid = false; }
-        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { accShowErr('acc-e-email', 'acc-f-email'); valid = false; }
+        if (!nip) { accShowErr('acc-e-nip', 'acc-f-nip'); valid = false; }
         if (!editingId && password.length < 8) { accShowErr('acc-e-password', 'acc-f-password'); valid = false; }
         if (editingId && password && password.length < 8) { accShowErr('acc-e-password', 'acc-f-password'); valid = false; }
         if (!valid) return;
@@ -462,11 +466,11 @@
             let payload;
             if (savedId) {
                 // UPDATE — kirim sebagai flat params
-                payload = { action: 'updateUser', id: savedId, name, email, role };
+                payload = { action: 'updateUser', id: savedId, name, nip, email: nip, role };
                 if (password) payload.password = await sha256(password);
             } else {
                 // CREATE — kirim sebagai flat params
-                payload = { action: 'createUser', name, email, password: await sha256(password), role };
+                payload = { action: 'createUser', name, nip, email: nip, password: await sha256(password), role };
             }
 
             // gasRequest sekarang = gasGet (flat params), tidak ada jsonBody
@@ -493,14 +497,14 @@
         const u = allUsers.find(x => x.id === id);
         if (!u) return;
         const r = ROLES[u.role] || { label: u.role, color: '#64748b', bg: '#f1f5f9', border: '#e2e8f0', icon: '👤' };
-        document.getElementById('acc-v-avatar').style.background = avColor(u.email);
+        document.getElementById('acc-v-avatar').style.background = avColor(getUserNip(u));
         document.getElementById('acc-v-avatar').textContent = initials(u.name);
         document.getElementById('acc-v-name').textContent = u.name;
-        document.getElementById('acc-v-email').textContent = u.email;
+        document.getElementById('acc-v-nip').textContent = getUserNip(u);
         document.getElementById('acc-v-role-badge').innerHTML = `<span class="acc-role-badge" style="color:${r.color};background:${r.bg};border-color:${r.border};">${r.icon} ${r.label}</span>`;
         document.getElementById('acc-v-id').textContent = u.id;
         document.getElementById('acc-v-role').textContent = `${r.icon} ${r.label}`;
-        document.getElementById('acc-v-email2').textContent = u.email;
+        document.getElementById('acc-v-nip2').textContent = getUserNip(u);
         document.getElementById('acc-v-created').textContent = accFmtDate(u.createdAt);
         document.getElementById('acc-v-edit-btn').onclick = () => {
             document.getElementById('acc-ov-view').style.display = 'none';
@@ -697,7 +701,7 @@
                         <option value="penilai_blut">Penilai BLUT KUMKM</option>
                     </optgroup>
                 </select>
-                <input type="text" class="search-input" id="acc-searchQ" placeholder="Cari nama / email..." oninput="accApplyFilter()">
+                <input type="text" class="search-input" id="acc-searchQ" placeholder="Cari nama / NIP..." oninput="accApplyFilter()">
                 <button onclick="accLoadUsers()" class="btn btn-sm" title="Refresh">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                     Refresh
@@ -758,9 +762,9 @@
                     <div class="acc-field-err" id="acc-e-name">Nama wajib diisi</div>
                 </div>
                 <div class="form-group" style="margin:0;">
-                    <label class="input-label">Email <span style="color:#ef4444;">*</span></label>
-                    <input type="email" class="input-field form-input" id="acc-f-email" placeholder="cth. budi@dinas.gov.id">
-                    <div class="acc-field-err" id="acc-e-email">Email tidak valid</div>
+                    <label class="input-label">NIP <span style="color:#ef4444;">*</span></label>
+                    <input type="text" class="input-field form-input" id="acc-f-nip" placeholder="cth. 198912312015021001" inputmode="numeric" autocomplete="off">
+                    <div class="acc-field-err" id="acc-e-nip">NIP wajib diisi</div>
                 </div>
             </div>
 
@@ -923,7 +927,7 @@
                 <div class="acc-avatar acc-avatar-lg" id="acc-v-avatar"></div>
                 <div>
                     <div style="font-size:16px;font-weight:700;color:#1e293b;" id="acc-v-name">—</div>
-                    <div style="font-size:13px;color:#64748b;margin-top:2px;" id="acc-v-email">—</div>
+                    <div style="font-size:13px;color:#64748b;margin-top:2px;" id="acc-v-nip">—</div>
                     <div style="margin-top:6px;" id="acc-v-role-badge"></div>
                 </div>
             </div>
@@ -937,8 +941,8 @@
                     <div class="acc-view-value" id="acc-v-role">—</div>
                 </div>
                 <div class="acc-view-field">
-                    <div class="acc-view-label">Email</div>
-                    <div class="acc-view-value" id="acc-v-email2" style="font-size:13px;">—</div>
+                    <div class="acc-view-label">NIP</div>
+                    <div class="acc-view-value" id="acc-v-nip2" style="font-size:13px;">—</div>
                 </div>
                 <div class="acc-view-field">
                     <div class="acc-view-label">Dibuat</div>

@@ -229,8 +229,9 @@
     // ── Avatar helpers ─────────────────────────────────────────
     const AV_COLORS = ['#3b82f6', '#8b5cf6', '#ef4444', '#f59e0b', '#10b981', '#ec4899', '#0ea5e9', '#14b8a6', '#f97316'];
     function avColor(email) {
+        email = String(email ?? '');
         let h = 0;
-        for (const c of (email || '')) h = (h << 5) - h + c.charCodeAt(0);
+        for (const c of email) h = (h << 5) - h + c.charCodeAt(0);
         return AV_COLORS[Math.abs(h) % AV_COLORS.length];
     }
     function initials(name) {

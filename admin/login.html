@@ -270,8 +270,8 @@
                             </div>
                         </div>
                         <div class="input-group">
-                            <label class="input-label">Email</label>
-                            <input type="email" id="email" class="input" placeholder="nama@dinas.gov.id" required>
+                            <label class="input-label">NIP</label>
+                            <input type="text" id="nip" class="input" placeholder="Masukkan NIP" autocomplete="off" inputmode="numeric" required>
                         </div>
                         <div class="input-group">
                             <label class="input-label">Password</label>
@@ -316,7 +316,7 @@
         const toggleBtn = document.getElementById('toggle-mode');
         const nameField = document.getElementById('name-field');
         const nameInput = document.getElementById('name');
-        const emailInput = document.getElementById('email');
+        const nipInput = document.getElementById('nip');
         const passwordInput = document.getElementById('password');
         const submitBtn = document.getElementById('submit-btn');
         const btnText = document.getElementById('btn-text');
@@ -409,12 +409,17 @@
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            const email = emailInput.value.trim();
+            const nip = nipInput.value.trim();
             const password = passwordInput.value;       // ambil as-is, jangan .trim()
             const name = nameInput.value.trim();
 
-            if (!email || !password || (!isLogin && !name)) {
+            if (!nip || !password || (!isLogin && !name)) {
                 Toast.error('Lengkapi semua field');
+                return;
+            }
+
+            if (!nip) {
+                Toast.error('NIP wajib diisi');
                 return;
             }
 
@@ -429,7 +434,8 @@
                 if (isLogin) {
                     const res = await callAPI({
                         action: 'login',
-                        email,
+                        nip,
+                        email: nip,
                         password: hashedPassword   // ← hash, bukan plain text
                     });
 
@@ -445,7 +451,8 @@
                     const res = await callAPI({
                         action: 'register',
                         name,
-                        email,
+                        nip,
+                        email: nip,
                         password: hashedPassword   // ← hash, bukan plain text
                     });
 
@@ -454,7 +461,7 @@
                         setTimeout(() => {
                             toggleBtn.click();
                             form.reset();
-                            emailInput.value = email;
+                            nipInput.value = nip;
                         }, 1000);
                     } else {
                         throw new Error(res.message || 'Registrasi gagal');
