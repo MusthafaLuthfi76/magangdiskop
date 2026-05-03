@@ -1381,8 +1381,8 @@
 /* ── TABLE ── */
 .ppo-tbl-wrap{overflow-x:auto;}
 #ppo-main-table{width:100%;border-collapse:collapse;font-size:13px;}
-#ppo-main-table thead tr{background:#1E293B;}
-#ppo-main-table th{padding:10px 12px;font-size:11px;font-weight:600;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.07em;text-align:left;white-space:nowrap;}
+#ppo-main-table thead tr{background:#ffffff;}
+#ppo-main-table th{padding:10px 12px;font-size:11px;font-weight:600;color:#1E293B;;text-transform:uppercase;letter-spacing:.07em;text-align:left;white-space:nowrap;}
 #ppo-main-table th.tc{text-align:center;}
 #ppo-main-table td{padding:11px 12px;border-bottom:1px solid #F8FAFC;vertical-align:middle;}
 #ppo-main-table tbody tr:hover td{background:#FAFAFA;}

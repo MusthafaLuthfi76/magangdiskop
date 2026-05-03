@@ -203,7 +203,7 @@
     }
 
     // ── Tab 1: Input ──────────────────────────────────────────
-    window.spjRenderInputTable = function () {
+    window.spjRenderInputTable = async function () {
         const bulan = document.getElementById('spj-select-bulan-input')?.value;
         const tbody = document.getElementById('spj-input-tbody');
         if (!tbody) return;
@@ -211,6 +211,36 @@
             tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#94a3b8;">Pilih bulan untuk melihat data</td></tr>';
             return;
         }
+
+        // Tampilkan loading dulu
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#94a3b8;"><span class="spinner spinner-sm"></span> Memuat data...</td></tr>';
+
+        // Fetch dari API (Google Sheets) lalu merge ke localStorage
+        try {
+            const apiData = await callAPI({ action: 'getMonthlySheetData', bulan });
+            if (apiData?.success && apiData?.data && Object.keys(apiData.data).length > 0) {
+                // Merge data API ke localStorage
+                const localData = getLocalData();
+                if (!localData[bulan]) localData[bulan] = {};
+                Object.entries(apiData.data).forEach(([unit, val]) => {
+                    // Hanya overwrite jika belum ada di local, atau pakai data spreadsheet
+                    localData[bulan][unit] = {
+                        totalPengajuan: 0,
+                        nominalTepat: 0,
+                        hariTerlambat: 0,
+                        nilaiTepat: val.nilaiTepat ?? 0,
+                        sanksi: val.sanksi ?? 0,
+                        totalNilai: val.totalNilai ?? 0,
+                        catatan: localData[bulan][unit]?.catatan || ''
+                    };
+                });
+                setLocalData(localData);
+            }
+        } catch (e) {
+            console.warn('Gagal fetch dari API, pakai localStorage:', e);
+        }
+
+        // Render seperti biasa dari localStorage (sudah di-update)
         const data = getLocalData();
         const monthData = data[bulan] || {};
         const fmt = n => new Intl.NumberFormat('id-ID').format(n);
@@ -239,9 +269,9 @@
                 <td style="text-align:center;vertical-align:middle;">${bulan}</td>
                 <td style="text-align:right;vertical-align:middle;">${u.totalPengajuan > 0 ? 'Rp ' + fmt(u.totalPengajuan) : '—'}</td>
                 <td style="text-align:right;vertical-align:middle;">${u.nominalTepat > 0 ? 'Rp ' + fmt(u.nominalTepat) : '—'}</td>
-                <td style="text-align:center;vertical-align:middle;">${u.nilaiTepat.toFixed(2)}</td>
-                <td style="text-align:center;vertical-align:middle;color:#ef4444;">${u.sanksi > 0 ? '−' + u.sanksi.toFixed(2) : '0.00'}</td>
-                <td style="text-align:center;vertical-align:middle;"><span class="badge ${badgeClass}">${u.totalNilai.toFixed(2)}</span></td>
+                <td style="text-align:center;vertical-align:middle;">${u.nilaiTepat?.toFixed(2)}</td>
+                <td style="text-align:center;vertical-align:middle;color:#ef4444;">${u.sanksi > 0 ? '−' + u.sanksi?.toFixed(2) : '0.00'}</td>
+                <td style="text-align:center;vertical-align:middle;"><span class="badge ${badgeClass}">${u.totalNilai?.toFixed(2)}</span></td>
                 <td style="text-align:center;vertical-align:middle;">
                     <div class="action-buttons"><div class="btn-icon-group">
                         <button onclick="spjOpenEditModal('${unit}','${bulan}')" class="btn-icon btn-icon-edit" title="Edit">${ICONS.edit}</button>
