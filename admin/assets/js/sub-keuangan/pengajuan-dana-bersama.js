@@ -1,5 +1,5 @@
 // ============================================================
-// pengajuan-dana-bersama.js — Pengajuan Dana Bersama section
+// pengajuan-dana-bersama.js — Pengajuan Dana Lintas Bidang section
 // Admin Panel — Dinas Koperasi UKM
 // Dipanggil eksplisit via window.initPengajuanDanaBersama()
 // dari dalam sectionInits['pengajuan-dana'] di pengajuan-dana.js
@@ -161,7 +161,7 @@
 
         if (!filteredData.length) {
             tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:#94a3b8;">
-                Tidak ada data pengajuan dana bersama</td></tr>`;
+                Tidak ada data Pengajuan Dana Lintas Bidang</td></tr>`;
             if (pgn) pgn.innerHTML = '';
             return;
         }
@@ -288,8 +288,8 @@
     // ── Approve ───────────────────────────────────────────────
     window.pdbApproveItem = function (id) {
         showConfirmModal({
-            icon: '✅', title: 'Setujui Pengajuan Dana Bersama?',
-            message: 'Pengajuan dana bersama ini akan disetujui.',
+            icon: '✅', title: 'Setujui Pengajuan Dana Lintas Bidang?',
+            message: 'Pengajuan Dana Lintas Bidang ini akan disetujui.',
             confirmText: 'Ya, Setujui', confirmClass: 'btn-success',
         }, async () => {
             const aBtn = document.getElementById(`pdb-btn-approve-${id}`);
@@ -299,7 +299,7 @@
             try {
                 const res = await callAPI({ action: 'updateStatusPengajuanDanaBersama', id, status: 'APPROVED' });
                 if (res?.success) {
-                    if (window.showToast) showToast('Pengajuan dana bersama disetujui', 'success');
+                    if (window.showToast) showToast('Pengajuan Dana Lintas Bidang disetujui', 'success');
                     window.pdbClearCache(); await window.pdbLoadData(true);
                 } else {
                     if (window.showToast) showToast(res?.message || 'Gagal', 'error');
@@ -317,8 +317,8 @@
     // ── Reject ────────────────────────────────────────────────
     window.pdbRejectItem = function (id) {
         showConfirmModal({
-            icon: '❌', title: 'Tolak Pengajuan Dana Bersama?',
-            message: 'Pengajuan dana bersama ini akan ditolak.',
+            icon: '❌', title: 'Tolak Pengajuan Dana Lintas Bidang?',
+            message: 'Pengajuan Dana Lintas Bidang ini akan ditolak.',
             confirmText: 'Ya, Tolak', confirmClass: 'btn-warning',
         }, async () => {
             const aBtn = document.getElementById(`pdb-btn-approve-${id}`);
@@ -328,7 +328,7 @@
             try {
                 const res = await callAPI({ action: 'updateStatusPengajuanDanaBersama', id, status: 'REJECTED' });
                 if (res?.success) {
-                    if (window.showToast) showToast('Pengajuan dana bersama ditolak', 'success');
+                    if (window.showToast) showToast('Pengajuan Dana Lintas Bidang ditolak', 'success');
                     window.pdbClearCache(); await window.pdbLoadData(true);
                 } else {
                     if (window.showToast) showToast(res?.message || 'Gagal', 'error');
@@ -404,14 +404,14 @@
         const item = allData.find(d => d.id === id);
         if (!item) return;
         showConfirmModal({
-            icon: '🗑️', title: 'Hapus Pengajuan Dana Bersama?',
+            icon: '🗑️', title: 'Hapus Pengajuan Dana Lintas Bidang?',
             message: `<strong>${item.nama || '-'}</strong><br>Bulan: ${item.bulanPengajuan || '-'} · Rp ${fmtNum(item.nominalPengajuan)}<br><br><span style="color:#ef4444;font-weight:600;">Tindakan ini tidak dapat dibatalkan.</span>`,
             confirmText: 'Ya, Hapus', confirmClass: 'btn-danger',
         }, async () => {
             try {
                 const res = await callAPI({ action: 'deletePengajuanDanaBersama', id });
                 if (res?.success) {
-                    if (window.showToast) showToast('Data pengajuan dana bersama berhasil dihapus', 'success');
+                    if (window.showToast) showToast('Data Pengajuan Dana Lintas Bidang berhasil dihapus', 'success');
                     window.pdbClearCache(); await window.pdbLoadData(true);
                 } else {
                     allData = allData.filter(d => d.id !== id);
@@ -445,7 +445,7 @@
         modal.style.display = 'flex';
         modal.innerHTML = `
         <div class="modal" style="max-width:580px;">
-            <div class="modal-header"><h2 class="modal-title">Detail Pengajuan Dana Bersama</h2></div>
+            <div class="modal-header"><h2 class="modal-title">Detail Pengajuan Dana Lintas Bidang</h2></div>
             <div class="modal-content">
                 <div class="pd-detail-wrap">
                     <div class="pd-detail-status-banner" style="background:${statusBg};border-color:${statusColor};">
@@ -544,7 +544,7 @@
     <div class="stat-card" style="border-left:4px solid #7c3aed;">
         <div class="stat-label">Total Pengajuan</div>
         <div class="stat-value" id="pdb-stat-total">0</div>
-        <div class="stat-footer">Laporan Pengajuan Dana Bersama</div>
+        <div class="stat-footer">Laporan Pengajuan Dana Lintas Bidang</div>
     </div>
     <div class="stat-card" style="border-left:4px solid #8b5cf6;">
         <div class="stat-label">Bulan Ini</div>
@@ -565,14 +565,14 @@
 
 <!-- ── Chart ───────────────────────────────────────────── -->
 <div class="card">
-    <div class="card-header"><h2 class="card-title">Tren Pengajuan Dana Bersama per Bulan</h2></div>
+    <div class="card-header"><h2 class="card-title">Tren Pengajuan Dana Lintas Bidang per Bulan</h2></div>
     <div class="card-content"><div class="chart-container"><canvas id="pdb-chartBersama"></canvas></div></div>
 </div>
 
 <!-- ── Tabel ───────────────────────────────────────────── -->
 <div class="card">
     <div class="card-header">
-        <h2 class="card-title">Daftar Pengajuan Dana Bersama</h2>
+        <h2 class="card-title">Daftar Pengajuan Dana Lintas Bidang</h2>
         <div class="filter-container" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
             <select class="select-input" id="pdb-filter-bulan" onchange="pdbFilterData()">
                 <option value="">Semua Bulan</option>
@@ -616,11 +616,11 @@
     <div class="pagination" id="pdb-pagination"></div>
 </div>
 
-<!-- ════ EDIT STATUS MODAL — Pengajuan Dana Bersama ════ -->
+<!-- ════ EDIT STATUS MODAL — Pengajuan Dana Lintas Bidang ════ -->
 <div id="pdb-editModal" class="modal-overlay" style="display:none;">
     <div class="modal" style="max-width:500px;">
         <div class="modal-header">
-            <h2 class="modal-title">Edit Status Pengajuan Dana Bersama</h2>
+            <h2 class="modal-title">Edit Status Pengajuan Dana Lintas Bidang</h2>
             <p style="font-size:13px;color:#64748b;margin-top:4px;" id="pdb-edit-subtitle">—</p>
         </div>
         <div class="modal-content">
@@ -644,7 +644,7 @@
                 <label class="pdb-status-option" id="pdb-opt-approved" onclick="pdbSelectStatus('APPROVED')">
                     <input type="radio" name="pdb-edit-status" id="pdb-radio-approved">
                     <div style="width:10px;height:10px;border-radius:50%;background:#10b981;flex-shrink:0;"></div>
-                    <div><div class="pdb-status-option-label" style="color:#065f46;">Disetujui</div><div class="pdb-status-option-sub">Pengajuan dana bersama disetujui</div></div>
+                    <div><div class="pdb-status-option-label" style="color:#065f46;">Disetujui</div><div class="pdb-status-option-sub">Pengajuan Dana Lintas Bidang disetujui</div></div>
                 </label>
                 <label class="pdb-status-option" id="pdb-opt-rejected" onclick="pdbSelectStatus('REJECTED')">
                     <input type="radio" name="pdb-edit-status" id="pdb-radio-rejected">

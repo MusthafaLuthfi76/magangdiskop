@@ -1,7 +1,7 @@
 // ============================================================
 // pengajuan-dana.js — Pengajuan Dana section (SPA)
 // Admin Panel — Dinas Koperasi UKM
-// Update: navigasi tab (Pengajuan Dana | Pengajuan Dana Bersama)
+// Update: navigasi tab (Pengajuan Dana | Pengajuan Dana Lintas Bidang)
 // ============================================================
 (function () {
     'use strict';
@@ -616,14 +616,14 @@
     <!-- ── Tab navigasi (desktop) ──────────────────────────── -->
     <div class="tabs">
         <button class="tab active" onclick="pdSwitchTab('pengajuan', event)">Pengajuan Dana</button>
-        <button class="tab"        onclick="pdSwitchTab('bersama', event)">Pengajuan Dana Bersama</button>
+        <button class="tab"        onclick="pdSwitchTab('bersama', event)">Pengajuan Dana Lintas Bidang</button>
     </div>
 
     <!-- ── Tab navigasi (mobile dropdown) ─────────────────── -->
     <div class="tabs-dropdown">
         <select onchange="pdSwitchTabDD(this.value)">
             <option value="pengajuan">Pengajuan Dana</option>
-            <option value="bersama">Pengajuan Dana Bersama</option>
+            <option value="bersama">Pengajuan Dana Lintas Bidang</option>
         </select>
     </div>
 
@@ -716,7 +716,7 @@
     </div><!-- /pd-tab-pengajuan -->
 
     <!-- ══════════════════════════════════════════════════════
-         TAB 2: PENGAJUAN DANA BERSAMA
+         TAB 2: Pengajuan Dana Lintas Bidang
          Konten diisi oleh initPengajuanDanaBersama()
     ══════════════════════════════════════════════════════════ -->
     <div id="pd-tab-bersama" class="tab-content">
@@ -780,7 +780,7 @@
             window.pdFilterData();
         });
 
-        // Inisialisasi konten Pengajuan Dana Bersama ke slot-nya
+        // Inisialisasi konten Pengajuan Dana Lintas Bidang ke slot-nya
         if (window.initPengajuanDanaBersama) window.initPengajuanDanaBersama();
     };
 

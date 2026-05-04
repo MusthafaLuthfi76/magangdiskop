@@ -2,7 +2,6 @@
 // GOOGLE APPS SCRIPT CONFIGURATION
 // ============================================
 const GAS_URL = "https://script.google.com/macros/s/AKfycbxbbyXZtHnLSDdTVyMVywu9ZOigH0VUpiInjjysi5sOBDhc1zmzTda1KYkorcpK8KQnTw/exec";
-
 // ============================================
 // KONFIGURASI WHATSAPP & HELPER
 // ============================================

@@ -11,6 +11,7 @@ const DB_GAS_URL =
         ? ANGGARAN_GAS_URL
         : 'https://script.google.com/macros/s/AKfycbw8U7fNHneCo2Mi-nWdP-oeeRl8JYydgyMD_ghmepNt4onT8XPixOVF3GQFWqIsVRkb/exec';
 
+
 let dbAllData = [];
 let dbDisplayData = [];
 let dbCurrentPage = 1;
@@ -573,14 +574,15 @@ async function dbSubmitEdit() {
             bidang: dbEditItem.bidang || '',
             nominal_pengajuan: nominalRaw,
             existingFileUrl: dbEditItem.linkFilePengajuanDana || '',
-            hasNewFile: 'false', fileName: '', fileData: '', mimeType: '',
+            hasNewFile: false, fileName: '', fileData: '', mimeType: '', // <-- Ubah jadi boolean asli
         };
 
         if (dbEditNewFile) {
             dbShowModalProgress(35, 'Membaca file PDF...');
             const base64Data = await dbFileToBase64(dbEditNewFile);
             fields.fileName = dbEditNewFile.name; fields.fileData = base64Data;
-            fields.mimeType = dbEditNewFile.type || 'application/pdf'; fields.hasNewFile = 'true';
+            fields.mimeType = dbEditNewFile.type || 'application/pdf';
+            fields.hasNewFile = true; // <-- Ubah jadi boolean asli
         }
 
         dbShowModalProgress(60, 'Mengirim ke sistem...');
@@ -606,9 +608,18 @@ async function dbSubmitEdit() {
 }
 
 async function dbPostFields(fields) {
-    const targetUrl = (typeof GAS_URL !== 'undefined') ? GAS_URL : DB_GAS_URL;
-    const body = Object.keys(fields).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(fields[k] != null ? fields[k] : ''); }).join('&');
-    const resp = await fetch(targetUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body, redirect: 'follow' });
+    // Jika kamu sudah mendefinisikan BACKEND_POST_URL di file lain, kita gunakan itu. 
+    // Jika tidak, fallback ke DB_GAS_URL
+    const targetUrl = (typeof BACKEND_POST_URL !== 'undefined') ? BACKEND_POST_URL : ((typeof GAS_URL !== 'undefined') ? GAS_URL : DB_GAS_URL);
+
+    // Kirim menggunakan payload raw JSON agar file base64 tidak error URL encoding
+    const resp = await fetch(targetUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(fields),
+        redirect: 'follow'
+    });
+
     const text = await resp.text();
     try { return JSON.parse(text); } catch (e) { return { status: 'success' }; }
 }

@@ -6,7 +6,7 @@
 // ============================================
 
 const ANGGARAN_GAS_URL = "https://script.google.com/macros/s/AKfycbw8U7fNHneCo2Mi-nWdP-oeeRl8JYydgyMD_ghmepNt4onT8XPixOVF3GQFWqIsVRkb/exec";
-
+const BACKEND_POST_URL = "https://script.google.com/macros/s/AKfycbxbbyXZtHnLSDdTVyMVywu9ZOigH0VUpiInjjysi5sOBDhc1zmzTda1KYkorcpK8KQnTw/exec";
 let allDana = [];
 let currentDanaFilter = 'ALL';
 let danaCurrentPage = 1;
@@ -575,12 +575,21 @@ async function submitDanaEdit() {
         if (editDanaNewFile) {
             showDanaModalProgress(35, 'Membaca file PDF...');
             const base64Data = await fileToBase64Dana(editDanaNewFile);
-            fields.fileName = editDanaNewFile.name; fields.fileData = base64Data;
-            fields.mimeType = editDanaNewFile.type || 'application/pdf'; fields.hasNewFile = 'true';
+            fields.fileName = editDanaNewFile.name;
+            fields.fileData = base64Data;
+            fields.mimeType = editDanaNewFile.type || 'application/pdf';
+            fields.hasNewFile = true; // <-- Ubah jadi boolean asli (tanpa kutip)
         }
         showDanaModalProgress(60, 'Mengirim ke sistem...');
-        const body = Object.keys(fields).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(fields[k] ?? '')).join('&');
-        const resp = await fetch(ANGGARAN_GAS_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body, redirect: 'follow' });
+
+        // KITA KIRIM RAW JSON DENGAN TEXT/PLAIN
+        const resp = await fetch(BACKEND_POST_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(fields),
+            redirect: 'follow'
+        });
+
         const text = await resp.text();
         let result;
         try { result = JSON.parse(text); } catch (e) { result = { status: 'success' }; }
