@@ -94,10 +94,6 @@ const URUTAN_BULAN_UPPER = [
     'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'
 ];
 
-// ── FIX: satu sumber kebenaran untuk daftar unit ─────────────
-// Backend handleGetRoomScores, handleGetVehicleScores, handleGetBBMScores
-// semuanya memakai urutan ini secara hardcoded (kolom 1-6 di spreadsheet).
-// Frontend WAJIB memakai array yang sama agar index kolom sinkron.
 const UNITS_LIST = [
     'Sekretariat',
     'Bidang Koperasi',
@@ -107,9 +103,6 @@ const UNITS_LIST = [
     'Balai Layanan Usaha Terpadu KUMKM'
 ];
 
-// UNITS_DISPLAY disamakan dengan UNITS_LIST supaya chart & tabel konsisten.
-// Jika Anda ingin urutan tampilan berbeda, ubah HANYA array ini —
-// tapi pastikan semua nama identik dengan UNITS_LIST.
 const UNITS_DISPLAY = [...UNITS_LIST];
 
 // ── Helper bulan ─────────────────────────────────────────────
@@ -165,13 +158,10 @@ function normalizeMonth(b) {
     return URUTAN_BULAN.find(x => x.toLowerCase() === low) || String(b).trim();
 }
 
-// FIX: normalizeUnit — pastikan nama unit dari backend cocok dengan UNITS_LIST
 function normalizeUnit(u) {
     if (!u) return '';
     const trimmed = String(u).trim();
-    // Cari kecocokan persis dulu
     if (UNITS_LIST.includes(trimmed)) return trimmed;
-    // Fallback: case-insensitive
     const lower = trimmed.toLowerCase();
     return UNITS_LIST.find(x => x.toLowerCase() === lower) || trimmed;
 }
@@ -416,7 +406,6 @@ function renderSingleScorePage({ scores, units, maxScore, stepY,
     const bulanList = URUTAN_BULAN.filter(b => scores.some(s => s.bulan === b));
     const filtered = scores.filter(s => s.bulan === selectedBulan);
 
-    // FIX: gunakan units (UNITS_LIST) sebagai sumber, bukan UNITS_DISPLAY
     const unitScores = units.map(unit => {
         const ud = filtered.filter(s => s.unit === unit);
         if (ud.length === 0) return { unit, skor: null };
@@ -489,7 +478,6 @@ function renderSingleScorePage({ scores, units, maxScore, stepY,
     const ctx = document.getElementById(chartId);
     if (window[chartWindow]) window[chartWindow].destroy();
     if (ctx) {
-        // FIX: chart memakai urutan units (UNITS_LIST) yang sama dengan backend
         const chartData = units.map(u => {
             const r = unitScores.find(x => x.unit === u);
             return r && r.skor !== null ? r.skor : 0;
@@ -591,13 +579,11 @@ function renderKendaraanPage(kunci, kebersihan, selectedBulan) {
     const bulanLabel = selectedBulan;
 
     function unitAvg(scores, unit) {
-        // FIX: filter harus cocok dengan unit yang sudah dinormalisasi
         const d = scores.filter(s => s.unit === unit);
         if (d.length === 0) return null;
         return d.reduce((s, x) => s + safeParseFloat(x.skorAkhir), 0) / d.length;
     }
 
-    // FIX: gunakan UNITS_LIST sebagai dasar ranking
     const rankedKunci = UNITS_LIST.map(u => ({ unit: u, skor: unitAvg(kF, u) }))
         .sort((a, b) => (a.skor === null ? 1 : b.skor === null ? -1 : b.skor - a.skor));
     const rankedKe = UNITS_LIST.map(u => ({ unit: u, skor: unitAvg(keF, u) }))
@@ -632,7 +618,6 @@ function renderKendaraanPage(kunci, kebersihan, selectedBulan) {
     document.getElementById('nilai-loading').style.display = 'none';
     document.getElementById('nilai-content').style.display = 'block';
 
-    // FIX: _drawSimpleChart memakai UNITS_LIST (urutan tetap, sesuai backend)
     _drawSimpleChart('kunci-chart', 'kunciChart', UNITS_LIST, kF, 5);
     _drawSimpleChart('kebersihan-chart', 'kebersihanChart', UNITS_LIST, keF, 5);
 }
@@ -662,7 +647,6 @@ function _drawSimpleChart(canvasId, winName, units, scores, maxScore) {
     const ctx = document.getElementById(canvasId);
     if (!ctx) return;
     if (window[winName]) window[winName].destroy();
-    // FIX: cari skor berdasarkan field unit yang sudah dinormalisasi
     const chartData = units.map(u => {
         const s = scores.find(x => x.unit === u);
         return s ? safeParseFloat(s.skorAkhir) : 0;
@@ -765,7 +749,6 @@ function renderDokumenScores(documents, selectedBulan) {
     const bulanLabel = selectedBulan;
 
     const scoresByUnit = {};
-    // FIX: iterasi UNITS_LIST bukan UNITS_DISPLAY
     UNITS_LIST.forEach(unit => {
         const docs = filtered.filter(d => d.unit === unit);
         if (docs.length > 0) {
@@ -824,7 +807,6 @@ function renderDokumenScores(documents, selectedBulan) {
     const ctx = document.getElementById('dokumen-chart');
     if (window.dokumenChart) window.dokumenChart.destroy();
     if (ctx) {
-        // FIX: chart mengikuti UNITS_LIST
         const chartData = UNITS_LIST.map(u => scoresByUnit[u] ? scoresByUnit[u].avgScore : 0);
         window.dokumenChart = new Chart(ctx, {
             type: 'bar',
@@ -855,41 +837,101 @@ function renderDokumenScores(documents, selectedBulan) {
 
 // ============================================================
 // 5. SPJ KEUANGAN
+// FIX: Gunakan getAllMonthlySheetData sebagai sumber utama,
+//      getSPJKeuangan sebagai fallback.
 // ============================================================
 async function loadSPJKeuanganTransparansi() {
     try {
+        // Coba ambil dari sheet bulanan dulu (ini yang berisi data aktual)
+        const monthlyResult = await jsonpFetch(SPJ_GAS_URL, { action: 'getAllMonthlySheetData' });
+
+        if (monthlyResult && monthlyResult.success && monthlyResult.rekap && Object.keys(monthlyResult.rekap).length > 0) {
+            // Format data dari getAllMonthlySheetData ke format yang diharapkan renderSPJKeuanganPage
+            spjAllData = _convertMonthlyRekap(monthlyResult.rekap);
+            const bulanList = URUTAN_BULAN.filter(b => spjAllData.some(d => d.bulan === b));
+            if (bulanList.length === 0) {
+                showError('Belum ada data penilaian SPJ Keuangan');
+                return;
+            }
+            const defaultBulan = pickDefaultBulan(bulanList);
+            renderSPJKeuanganPage(defaultBulan);
+            return;
+        }
+
+        // Fallback ke getSPJKeuangan (sheet DATA_PENILAIAN_SPJ)
         const result = await jsonpFetch(SPJ_GAS_URL, { action: 'getSPJKeuangan' });
-        if (!result.success) { showError('Gagal memuat data SPJ: ' + (result.message || '')); return; }
-        spjAllData = (result.data || []).map(d => ({
+        if (!result || !result.success) {
+            showError('Gagal memuat data SPJ Keuangan');
+            return;
+        }
+        if (!result.data || result.data.length === 0) {
+            showError('Belum ada data penilaian SPJ Keuangan');
+            return;
+        }
+        spjAllData = result.data.map(d => ({
             ...d,
             bulan: normalizeMonth(d.bulan),
             unit: normalizeUnit(d.unit)
         }));
-        if (spjAllData.length === 0) { showError('Belum ada data penilaian SPJ Keuangan'); return; }
-        const bulanList = URUTAN_BULAN.filter(b => new Set(spjAllData.map(d => d.bulan)).has(b));
+        const bulanList = URUTAN_BULAN.filter(b => spjAllData.some(d => d.bulan === b));
         const defaultBulan = pickDefaultBulan(bulanList);
         renderSPJKeuanganPage(defaultBulan);
-    } catch (err) { showError('Gagal menghubungi server SPJ: ' + err.message); }
+
+    } catch (err) {
+        showError('Gagal menghubungi server SPJ: ' + err.message);
+    }
+}
+
+/**
+ * Konversi format rekap dari getAllMonthlySheetData:
+ * { "JANUARI": { "Sekretariat": { nilaiTepat, sanksi, totalNilai }, ... }, ... }
+ * ke format array yang dipakai renderSPJKeuanganPage:
+ * [{ bulan, unit, totalNilai, nilaiTepat, sanksi, ... }, ...]
+ */
+function _convertMonthlyRekap(rekap) {
+    const result = [];
+    Object.keys(rekap).forEach(bulanUpper => {
+        const bulanTitle = normalizeMonth(bulanUpper);
+        const unitData = rekap[bulanUpper];
+        Object.keys(unitData).forEach(unit => {
+            const d = unitData[unit];
+            result.push({
+                bulan: bulanTitle,
+                unit: normalizeUnit(unit),
+                totalNilai: safeParseFloat(d.totalNilai),
+                nilaiTepat: safeParseFloat(d.nilaiTepat),
+                sanksi: safeParseFloat(d.sanksi),
+                // Data tambahan tidak tersedia dari sheet bulanan,
+                // set default supaya tabel tidak error
+                totalPengajuan: 0,
+                nominalTepat: 0,
+                hariTerlambat: 0,
+                catatan: '—',
+                penilai: '—',
+                timestamp: ''
+            });
+        });
+    });
+    return result;
 }
 
 function renderSPJKeuanganPage(selectedBulan) {
     const MAKS = 35;
     const data = spjAllData.filter(d => d.bulan === selectedBulan);
-    const bulanList = URUTAN_BULAN.filter(b => new Set(spjAllData.map(d => d.bulan)).has(b));
+    const bulanList = URUTAN_BULAN.filter(b => spjAllData.some(d => d.bulan === b));
     const bulanLabel = selectedBulan;
 
-    // FIX: gunakan UNITS_LIST
     const unitSummary = UNITS_LIST.map(unit => {
         const ud = data.filter(d => d.unit === unit);
         if (ud.length === 0) return { unit, totalNilai: null };
         const l = [...ud].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))[0];
         return {
             unit,
-            totalNilai: parseFloat(l.totalNilai) || 0,
-            nilaiTepat: parseFloat(l.nilaiTepat) || 0,
-            sanksi: parseFloat(l.sanksi) || 0,
-            totalPengajuan: parseFloat(l.totalPengajuan) || 0,
-            nominalTepat: parseFloat(l.nominalTepat) || 0,
+            totalNilai: safeParseFloat(l.totalNilai),
+            nilaiTepat: safeParseFloat(l.nilaiTepat),
+            sanksi: safeParseFloat(l.sanksi),
+            totalPengajuan: safeParseFloat(l.totalPengajuan),
+            nominalTepat: safeParseFloat(l.nominalTepat),
             hariTerlambat: parseInt(l.hariTerlambat) || 0,
             catatan: l.catatan || '—',
             penilai: l.penilai || '—'
@@ -922,32 +964,28 @@ function renderSPJKeuanganPage(selectedBulan) {
     html += `<div class="table-compact"><table>
         <thead><tr>
             <th style="width:52px;text-align:center;">Rank</th><th>Unit Kerja</th>
-            <th style="text-align:right;">Total Pengajuan</th>
-            <th style="text-align:right;">Nominal Tepat</th>
-            <th style="text-align:center;">Ketepatan</th>
+            <th style="text-align:center;">Nilai Tepat Waktu</th>
+            <th style="text-align:center;">Sanksi</th>
             <th style="text-align:center;">Total Nilai</th>
             <th style="min-width:130px;">Progress</th>
-            <th>Catatan</th>
         </tr></thead>
         <tbody>${ranked.map((r, i) => {
-        if (r.totalNilai === null) return `<tr style="opacity:.4;">
+            if (r.totalNilai === null) return `<tr style="opacity:.4;">
                 <td style="text-align:center;">—</td><td><strong>${r.unit}</strong></td>
-                <td colspan="6" style="text-align:center;color:${C.textLight};font-style:italic;">Belum ada data</td></tr>`;
-        const kls = nilaiClass(r.totalNilai, MAKS);
-        const chip = r.hariTerlambat > 0
-            ? `<span class="chip-terlambat">${r.hariTerlambat} hari terlambat</span>`
-            : `<span class="chip-tepat">Tepat Waktu</span>`;
-        return `<tr>
+                <td colspan="4" style="text-align:center;color:${C.textLight};font-style:italic;">Belum ada data</td></tr>`;
+            const kls = nilaiClass(r.totalNilai, MAKS);
+            const sanksiStr = r.sanksi > 0
+                ? `<span style="color:${C.error};font-weight:600;">-${r.sanksi.toFixed(2)}</span>`
+                : `<span style="color:${C.success};font-weight:600;">0</span>`;
+            return `<tr>
                 <td style="text-align:center;">${rankBadge(i)}</td>
                 <td><strong>${r.unit}</strong></td>
-                <td style="text-align:right;white-space:nowrap;font-size:.875rem;">${fmtRp(r.totalPengajuan)}</td>
-                <td style="text-align:right;white-space:nowrap;font-size:.875rem;">${fmtRp(r.nominalTepat)}</td>
-                <td style="text-align:center;">${chip}</td>
+                <td style="text-align:center;">${r.nilaiTepat.toFixed(2)}</td>
+                <td style="text-align:center;">${sanksiStr}</td>
                 <td style="text-align:center;"><span class="${kls}" style="font-size:1rem;font-weight:700;">${r.totalNilai.toFixed(2)}</span></td>
                 <td>${progressBar(r.totalNilai, MAKS)}</td>
-                <td style="font-size:.8125rem;color:${C.textLight};max-width:160px;">${r.catatan}</td>
             </tr>`;
-    }).join('')}</tbody>
+        }).join('')}</tbody>
     </table></div>`;
 
     document.getElementById('nilai-content').innerHTML = html;
@@ -960,7 +998,6 @@ function renderSPJKeuanganPage(selectedBulan) {
         window.spjChart = new Chart(ctx, {
             type: 'bar',
             data: {
-                // FIX: chart mengikuti UNITS_LIST
                 labels: UNITS_LIST.map(u => u.length > 18 ? u.substring(0, 18) + '…' : u),
                 datasets: [
                     {
@@ -1038,7 +1075,6 @@ function renderMonevPage(selectedBulan) {
     const dataBulan = monevAllData[selectedBulan] || {};
     const bulanLabel = bulanUpperToTitle(selectedBulan);
 
-    // FIX: gunakan UNITS_LIST
     const ranked = UNITS_LIST.map(unit => {
         const d = dataBulan[unit];
         if (!d) return { unit, total: null };
@@ -1165,6 +1201,7 @@ function renderMonevPage(selectedBulan) {
 
 // ============================================================
 // HOME SUMMARY
+// FIX: Gunakan getAllMonthlySheetData untuk SPJ, bukan getSPJKeuangan
 // ============================================================
 function calculateUnitAverageByMonth(scores, unit, month) {
     const f = scores.filter(s => s.unit === unit && (!month || s.bulan === month));
@@ -1178,10 +1215,27 @@ function calculateDocUnitAverage(docs, unit, month) {
     return a.reduce((s, d) => s + safeParseFloat(d.nilai), 0) / a.length;
 }
 
-function calculateSPJUnitAverage(spjData, unit, month) {
-    const filtered = spjData.filter(d => d.unit === unit && (!month || d.bulan === month));
-    if (filtered.length === 0) return 0;
-    return filtered.reduce((s, d) => s + (parseFloat(d.totalNilai) || 0), 0) / filtered.length;
+/**
+ * FIX: Hitung nilai SPJ dari data rekap sheet bulanan.
+ * Format spjRekap: { "JANUARI": { "Sekretariat": { totalNilai, nilaiTepat, sanksi }, ... }, ... }
+ */
+function calculateSPJUnitFromRekap(spjRekap, unit, month) {
+    if (!spjRekap || Object.keys(spjRekap).length === 0) return 0;
+
+    if (month) {
+        // Cari bulan yang cocok (case-insensitive, title atau upper)
+        const monthUpper = URUTAN_BULAN_UPPER[URUTAN_BULAN.indexOf(month)] || month.toUpperCase();
+        const dataBulan = spjRekap[monthUpper];
+        if (!dataBulan || !dataBulan[unit]) return 0;
+        return safeParseFloat(dataBulan[unit].totalNilai);
+    }
+
+    // Rata-rata semua bulan
+    const values = Object.keys(spjRekap)
+        .map(b => spjRekap[b][unit] ? safeParseFloat(spjRekap[b][unit].totalNilai) : null)
+        .filter(v => v !== null && v > 0);
+    if (values.length === 0) return 0;
+    return values.reduce((s, v) => s + v, 0) / values.length;
 }
 
 function calculateMonevUnitAverage(monevData, unit, month) {
@@ -1207,33 +1261,40 @@ function loadHomeSummary() {
         jsonpFetch(ADMIN_GAS_URL, { action: 'getVehicleScores', jenis: 'KEBERSIHAN' }),
         jsonpFetch(ADMIN_GAS_URL, { action: 'getBBMScores' }),
         jsonpFetch(ADMIN_GAS_URL, { action: 'getDocuments' }),
-        jsonpFetch(SPJ_GAS_URL, { action: 'getSPJKeuangan' }),
+        // FIX: Gunakan getAllMonthlySheetData untuk mendapatkan data SPJ dari sheet bulanan
+        jsonpFetch(SPJ_GAS_URL, { action: 'getAllMonthlySheetData' }),
         jsonpFetch(MONEV_GAS_URL, { action: 'getAllSheetData' })
     ])
-        .then(([roomData, kunciData, kebersihanData, bbmData, docsData, spjData, monevData]) => {
+        .then(([roomData, kunciData, kebersihanData, bbmData, docsData, spjMonthlyData, monevData]) => {
             const nd = {
-                room: { scores: normalizeScores(roomData.scores || []) },
-                kunci: { scores: normalizeScores(kunciData.scores || []) },
-                kebersihan: { scores: normalizeScores(kebersihanData.scores || []) },
-                bbm: { scores: normalizeScores(bbmData.scores || []) },
-                docs: normalizeDocs(docsData),
-                spj: (spjData && spjData.success)
-                    ? (spjData.data || []).map(d => ({
-                        ...d,
-                        bulan: normalizeMonth(d.bulan),
-                        unit: normalizeUnit(d.unit)
-                    }))
-                    : [],
+                room: { scores: normalizeScores((roomData && roomData.scores) || []) },
+                kunci: { scores: normalizeScores((kunciData && kunciData.scores) || []) },
+                kebersihan: { scores: normalizeScores((kebersihanData && kebersihanData.scores) || []) },
+                bbm: { scores: normalizeScores((bbmData && bbmData.scores) || []) },
+                docs: normalizeDocs(Array.isArray(docsData) ? docsData : []),
+                // FIX: simpan rekap bulanan SPJ, bukan array
+                spjRekap: (spjMonthlyData && spjMonthlyData.success && spjMonthlyData.rekap)
+                    ? spjMonthlyData.rekap
+                    : {},
                 monev: (monevData && monevData.status !== 'error')
                     ? (monevData.data || {})
                     : {}
             };
             homeSummaryAllData = nd;
 
+            // Kumpulkan semua bulan tersedia
             const allMonthsSet = new Set();
-            [...nd.room.scores, ...nd.kunci.scores, ...nd.kebersihan.scores, ...nd.bbm.scores, ...nd.spj]
+            [...nd.room.scores, ...nd.kunci.scores, ...nd.kebersihan.scores, ...nd.bbm.scores]
                 .forEach(s => { if (s.bulan) allMonthsSet.add(s.bulan); });
             nd.docs.forEach(d => { if (d.bulan) allMonthsSet.add(d.bulan); });
+
+            // Tambahkan bulan dari SPJ rekap
+            Object.keys(nd.spjRekap).forEach(b => {
+                const idx = URUTAN_BULAN_UPPER.indexOf(b);
+                if (idx >= 0) allMonthsSet.add(URUTAN_BULAN[idx]);
+            });
+
+            // Tambahkan bulan dari Monev
             Object.keys(nd.monev).forEach(b => {
                 const idx = URUTAN_BULAN_UPPER.indexOf(b);
                 if (idx >= 0) allMonthsSet.add(URUTAN_BULAN[idx]);
@@ -1256,7 +1317,15 @@ function loadHomeSummary() {
                 </select>
             </div>` + summaryContainer.innerHTML;
             }
-            renderHomeSummary(nd, '');
+
+            // Default ke bulan saat ini jika ada datanya
+            const currentMonth = getCurrentMonthName();
+            const defaultFilter = allMonthsSet.has(currentMonth) ? currentMonth : (monthsArray[monthsArray.length - 1] || '');
+            if (defaultFilter && document.getElementById('summary-month-filter')) {
+                document.getElementById('summary-month-filter').value = defaultFilter;
+            }
+
+            renderHomeSummary(nd, defaultFilter);
         })
         .catch(err => {
             const el = document.getElementById('summary-loading');
@@ -1274,19 +1343,21 @@ function updateHomeSummaryByMonth(month) {
 
 function renderHomeSummary(allData, filterMonth) {
     const filterMonthUpper = filterMonth
-        ? URUTAN_BULAN_UPPER[URUTAN_BULAN.indexOf(filterMonth)] || filterMonth.toUpperCase()
+        ? (URUTAN_BULAN_UPPER[URUTAN_BULAN.indexOf(filterMonth)] || filterMonth.toUpperCase())
         : '';
 
     const MAX_TOTAL = 100;
 
-    // FIX: gunakan UNITS_LIST (urutan seragam dengan backend)
     const rankings = UNITS_LIST.map(unit => {
         const roomAvg = calculateUnitAverageByMonth(allData.room.scores || [], unit, filterMonth);
         const kunciAvg = calculateUnitAverageByMonth(allData.kunci.scores || [], unit, filterMonth);
         const kebersihanAvg = calculateUnitAverageByMonth(allData.kebersihan.scores || [], unit, filterMonth);
         const bbmAvg = calculateUnitAverageByMonth(allData.bbm.scores || [], unit, filterMonth);
         const docsAvg = calculateDocUnitAverage(Array.isArray(allData.docs) ? allData.docs : [], unit, filterMonth);
-        const spjAvg = calculateSPJUnitAverage(allData.spj || [], unit, filterMonth);
+
+        // FIX: gunakan spjRekap + fungsi baru calculateSPJUnitFromRekap
+        const spjAvg = calculateSPJUnitFromRekap(allData.spjRekap || {}, unit, filterMonth);
+
         const monevVal = calculateMonevUnitAverage(allData.monev || {}, unit, filterMonthUpper);
 
         const totalScore = roomAvg + kunciAvg + kebersihanAvg + bbmAvg + docsAvg + spjAvg + monevVal;
@@ -1325,4 +1396,4 @@ if (document.readyState === 'loading') {
     setTimeout(loadHomeSummary, 500);
 }
 
-console.log('✅ transparansi-all.js (fixed: UNITS_LIST unified) loaded');
+console.log('✅ transparansi-all.js (fixed: SPJ from getAllMonthlySheetData) loaded');
