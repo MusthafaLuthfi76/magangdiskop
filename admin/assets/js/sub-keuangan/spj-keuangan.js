@@ -217,21 +217,19 @@
 
         // Fetch dari API (Google Sheets) lalu merge ke localStorage
         try {
-            const apiData = await callAPI({ action: 'getMonthlySheetData', bulan });
-            if (apiData?.success && apiData?.data && Object.keys(apiData.data).length > 0) {
-                // Merge data API ke localStorage
+            const apiData = await callAPI({ action: 'getSPJKeuangan', bulan });
+            if (apiData?.success && apiData?.data && apiData.data.length > 0) {
                 const localData = getLocalData();
                 if (!localData[bulan]) localData[bulan] = {};
-                Object.entries(apiData.data).forEach(([unit, val]) => {
-                    // Hanya overwrite jika belum ada di local, atau pakai data spreadsheet
-                    localData[bulan][unit] = {
-                        totalPengajuan: 0,
-                        nominalTepat: 0,
-                        hariTerlambat: 0,
-                        nilaiTepat: val.nilaiTepat ?? 0,
-                        sanksi: val.sanksi ?? 0,
-                        totalNilai: val.totalNilai ?? 0,
-                        catatan: localData[bulan][unit]?.catatan || ''
+                apiData.data.forEach(item => {
+                    localData[bulan][item.unit] = {
+                        totalPengajuan: parseFloat(item.totalPengajuan) || 0,
+                        nominalTepat:   parseFloat(item.nominalTepat)   || 0,
+                        hariTerlambat:  parseFloat(item.hariTerlambat)  || 0,
+                        nilaiTepat:     parseFloat(item.nilaiTepat)     || 0,
+                        sanksi:         parseFloat(item.sanksi)         || 0,
+                        totalNilai:     parseFloat(item.totalNilai)     || 0,
+                        catatan:        item.catatan || ''
                     };
                 });
                 setLocalData(localData);
