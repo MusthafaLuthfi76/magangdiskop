@@ -216,6 +216,7 @@
         tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#94a3b8;"><span class="spinner spinner-sm"></span> Memuat data...</td></tr>';
 
         // Fetch dari API (Google Sheets) lalu merge ke localStorage
+        // Fetch dari DATA_PENILAIAN_SPJ dulu
         try {
             const apiData = await callAPI({ action: 'getSPJKeuangan', bulan });
             if (apiData?.success && apiData?.data && apiData.data.length > 0) {
@@ -233,6 +234,28 @@
                     };
                 });
                 setLocalData(localData);
+            } else {
+                // Fallback: baca dari sheet bulan (MEI, JAN, dst)
+                const sheetData = await callAPI({ action: 'getMonthlySheetData', bulan });
+                if (sheetData?.success && sheetData?.data && Object.keys(sheetData.data).length > 0) {
+                    const localData = getLocalData();
+                    if (!localData[bulan]) localData[bulan] = {};
+                    Object.entries(sheetData.data).forEach(([unit, val]) => {
+                        // Jangan overwrite kalau sudah ada data lengkap di local
+                        if (!localData[bulan][unit] || localData[bulan][unit].totalNilai === 0) {
+                            localData[bulan][unit] = {
+                                totalPengajuan: 0,
+                                nominalTepat:   0,
+                                hariTerlambat:  0,
+                                nilaiTepat:     val.nilaiTepat  ?? 0,
+                                sanksi:         val.sanksi      ?? 0,
+                                totalNilai:     val.totalNilai  ?? 0,
+                                catatan:        localData[bulan][unit]?.catatan || ''
+                            };
+                        }
+                    });
+                    setLocalData(localData);
+                }
             }
         } catch (e) {
             console.warn('Gagal fetch dari API, pakai localStorage:', e);
