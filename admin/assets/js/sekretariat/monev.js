@@ -8,14 +8,30 @@
 
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyuQaHsIxxtmnTr4cPuyUQzdvdr23_3wK59JIF8VYA1ihhBm4ZeD3A0qzpginmmA9d-ng/exec';
 
+    // ─── REVISI #3: Sekretariat dipecah jadi 3 sub-unit ──────
+    // UNITS adalah daftar unit utama untuk tampilan tabel input
     const UNITS = [
         "Balai Layanan Usaha Terpadu KUMKM", "Bidang Kewirausahaan", "Bidang Koperasi",
-        "Bidang UKM", "Bidang Usaha Mikro", "Sekretariat"
+        "Bidang UKM", "Bidang Usaha Mikro",
+        // Sekretariat dipecah:
+        "Sekretariat - Subbag Umum",
+        "Sekretariat - Subbag Keuangan",
+        "Sekretariat - Program"
     ];
-    const SHORT_UNITS = ['BLUT', 'Kewirausahaan', 'Koperasi', 'UKM', 'Usaha Mikro', 'Sekretariat'];
+
+    // Label pendek untuk chart rekap (SHORT_UNITS harus sesuai urutan UNITS)
+    const SHORT_UNITS = ['BLUT', 'Kewirausahaan', 'Koperasi', 'UKM', 'Usaha Mikro', 'Sekre-Umum', 'Sekre-Keu', 'Sekre-Prog'];
+
+    // Grup Sekretariat — dipakai untuk menampilkan sub-total gabungan di rekap
+    const SEKRE_UNITS = [
+        "Sekretariat - Subbag Umum",
+        "Sekretariat - Subbag Keuangan",
+        "Sekretariat - Program"
+    ];
+
     const MONTHS = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"];
     const MAX_FILE_SIZE = 10 * 1024 * 1024;
-    const CACHE_KEY = 'monev_data_v3';
+    const CACHE_KEY = 'monev_data_v4'; // versi baru agar cache lama tidak tabrakan
 
     let selectedBuktiFile = null;
     let selectedBuktiBase64 = null;
@@ -25,7 +41,7 @@
     let chartTotal = null;
     let currentUser = JSON.parse(localStorage.getItem('user') || '{}');
 
-    // ── SVG Icons (setema kearsipan) ──────────────────────────
+    // ── SVG Icons ──────────────────────────────────────────────
     const ICONS = {
         refresh: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`,
         plus: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
@@ -58,10 +74,21 @@
     }
 
     // ─── SCORE CALC ──────────────────────────────────────────
+    // REVISI #2: Tambah opsi efisiensi fisik (skor tetap 10)
     function calcScores(state) {
         let waktu = state.waktuOk ? 5 : Math.max(0, 5 - parseInt(state.selKeterlambatan || 3));
         let kelengkapan = state.kelengkapanOk ? 5 : Math.max(0, 5 - parseInt(state.selKualitas || 2));
-        let fisik = state.fisikOk ? 10 : Math.max(0, 10 - parseInt(state.selDeviasiFisik || 5));
+
+        let fisik;
+        if (state.fisikOk) {
+            fisik = 10;
+        } else if (state.selDeviasiFisik === 'efisiensi') {
+            // Deviasi karena efisiensi tetap dapat skor penuh
+            fisik = 10;
+        } else {
+            fisik = Math.max(0, 10 - parseInt(state.selDeviasiFisik || 5));
+        }
+
         let keuangan = state.keuanganOk ? 10 : Math.max(0, 10 - parseInt(state.selDeviasiKeuangan || 5));
         let partisipasi = state.partisipasiOk ? 5 : (state.selPartisipasi === 'tidak-hadir' ? 0 : 3);
         let tindakLanjut = state.tindakLanjutOk ? 5 : 0;
@@ -87,11 +114,9 @@
     function callAPIPost(params) {
         return new Promise((resolve, reject) => {
             const t = setTimeout(() => reject(new Error('timeout')), 60000);
-
             const body = Object.keys(params)
                 .map(k => encodeURIComponent(k) + '=' + encodeURIComponent(params[k] || ''))
                 .join('&');
-
             fetch(APPS_SCRIPT_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -99,11 +124,8 @@
                 redirect: 'follow'
             })
                 .then(r => {
-                    // Cek apakah response beneran JSON atau HTML redirect
                     const contentType = r.headers.get('content-type') || '';
                     if (contentType.includes('text/html')) {
-                        // Apps Script redirect — ambil via GET JSONP sebagai fallback
-                        // Ini tidak akan terjadi kalau doPost return JSON langsung
                         console.warn('Response adalah HTML, bukan JSON. Cek doPost.');
                     }
                     return r.text();
@@ -118,7 +140,6 @@
         });
     }
 
-
     // ─── LOAD DATA DARI SERVER ────────────────────────────────
     window.mnvLoadDataFromServer = async function () {
         showTableLoading();
@@ -131,8 +152,7 @@
             }
         } catch (err) {
             const cached = getLocalData();
-            if (Object.keys(cached).length > 0) {
-            }
+            if (Object.keys(cached).length > 0) { /* pakai cache */ }
         } finally {
             const selectBulan = document.getElementById('mnv-select-bulan-input');
             const bulan = selectBulan ? selectBulan.value : '';
@@ -162,13 +182,13 @@
         if (!bulan || !data[bulan]) {
             document.getElementById('mnv-avg-score-this-month').textContent = '—';
             document.getElementById('mnv-units-assessed').textContent = '0';
-            document.getElementById('mnv-units-pending').textContent = '6';
+            document.getElementById('mnv-units-pending').textContent = UNITS.length;
             return;
         }
         const vals = Object.values(data[bulan]).map(u => u.total);
         document.getElementById('mnv-avg-score-this-month').textContent = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1) : '—';
         document.getElementById('mnv-units-assessed').textContent = vals.length;
-        document.getElementById('mnv-units-pending').textContent = Math.max(0, 6 - vals.length);
+        document.getElementById('mnv-units-pending').textContent = Math.max(0, UNITS.length - vals.length);
     };
 
     // ─── RENDER TABLE ─────────────────────────────────────────
@@ -180,52 +200,99 @@
             return;
         }
         const monthData = (getLocalData()[bulan]) || {};
-        tbody.innerHTML = UNITS.map(unit => {
-            const u = monthData[unit];
-            if (!u) return `
-            <tr>
-                <td><div style="font-weight:600;">${unit}</div><div style="font-size:12px;color:#64748b;margin-top:2px;">${bulan}</div></td>
-                <td colspan="2" style="color:#94a3b8;font-style:italic;font-size:13px;">Belum dinilai</td>
-                <td><span class="mnv-badge-pending">Pending</span></td>
-                <td colspan="2" style="color:#94a3b8;">—</td>
-                <td>
-                    <div class="action-buttons"><div class="btn-icon-group">
-                        <button onclick="mnvOpenInputModal('${esc(unit)}','${bulan}')" class="btn-icon btn-icon-approve" title="Isi Nilai">${ICONS.plus}</button>
-                    </div></div>
+
+        // Kelompokkan: unit non-sekre + row grup sekretariat
+        let rows = '';
+
+        // Unit non-sekretariat
+        const nonSekre = UNITS.filter(u => !SEKRE_UNITS.includes(u));
+        nonSekre.forEach(unit => {
+            rows += renderUnitRow(unit, bulan, monthData);
+        });
+
+        // Grup Sekretariat — header baris grup
+        rows += `<tr style="background:#f0f4fa;">
+            <td colspan="8" style="padding:8px 14px;font-size:12px;font-weight:700;color:#1e40af;letter-spacing:.04em;text-transform:uppercase;">
+                📂 Sekretariat (3 Sub-Bagian)
+            </td>
+        </tr>`;
+        SEKRE_UNITS.forEach(unit => {
+            rows += renderUnitRow(unit, bulan, monthData);
+        });
+
+        // Sub-total Sekretariat
+        const sekreVals = SEKRE_UNITS.map(u => monthData[u]);
+        const sekreDinilai = sekreVals.filter(Boolean);
+        if (sekreDinilai.length > 0) {
+            const avgTotal = (sekreDinilai.reduce((a, u) => a + (u.total || 0), 0) / sekreDinilai.length).toFixed(1);
+            rows += `<tr style="background:#dbeafe;border-top:2px solid #93c5fd;">
+                <td colspan="2" style="padding:8px 14px;font-size:12px;font-weight:700;color:#1e3a8a;">
+                    Rata-rata Sekretariat (${sekreDinilai.length}/${SEKRE_UNITS.length} dinilai)
                 </td>
+                <td style="font-size:18px;font-weight:800;color:#1e3a8a;">${avgTotal}</td>
+                <td colspan="5"></td>
             </tr>`;
-            const badgeCls = u.total >= 35 ? 'mnv-badge-good' : u.total >= 25 ? 'mnv-badge-mid' : 'mnv-badge-bad';
-            const scoreColor = u.total >= 35 ? '#10b981' : u.total >= 25 ? '#f59e0b' : '#ef4444';
-            const buktiCell = u.linkBukti
-                ? `<a href="${u.linkBukti}" target="_blank" class="mnv-link-btn">${ICONS.link} Lihat</a>`
-                : `<span style="color:#94a3b8;font-size:13px;">—</span>`;
-            return `
-            <tr>
-                <td><div style="font-weight:600;">${unit}</div><div style="font-size:12px;color:#64748b;margin-top:2px;">${bulan}</div></td>
-                <td style="font-size:13px;">
-                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;min-width:180px;">
-                        <span style="font-size:11px;color:#64748b;">Waktu: <b>${u.waktu}</b></span>
-                        <span style="font-size:11px;color:#64748b;">Klgkpn: <b>${u.kelengkapan}</b></span>
-                        <span style="font-size:11px;color:#64748b;">Fisik: <b>${u.fisik}</b></span>
-                        <span style="font-size:11px;color:#64748b;">Keuangan: <b>${u.keuangan}</b></span>
-                        <span style="font-size:11px;color:#64748b;">Partisipasi: <b>${u.partisipasi}</b></span>
-                        <span style="font-size:11px;color:#64748b;">Tindak Lanjut: <b>${u.tindakLanjut}</b></span>
-                    </div>
-                </td>
-                <td><strong style="font-size:20px;color:${scoreColor};">${u.total}</strong><span style="font-size:11px;color:#94a3b8;">/40</span></td>
-                <td><span class="${badgeCls}">${u.total >= 35 ? 'Baik' : u.total >= 25 ? 'Cukup' : 'Kurang'}</span></td>
-                <td>${buktiCell}</td>
-                <td style="font-size:12px;color:#64748b;">${u.catatan ? (u.catatan.length > 40 ? u.catatan.slice(0, 40) + '…' : u.catatan) : '—'}</td>
-                <td>
-                    <div class="action-buttons"><div class="btn-icon-group">
-                        <button onclick="mnvOpenViewModal('${esc(unit)}','${bulan}')" class="btn-icon btn-icon-view" title="Lihat Detail">${ICONS.eye}</button>
-                        <button onclick="mnvOpenInputModal('${esc(unit)}','${bulan}')" class="btn-icon btn-icon-edit" title="Edit Penilaian">${ICONS.edit}</button>
-                        <button onclick="mnvDeleteEntry('${esc(unit)}','${bulan}')" class="btn-icon btn-icon-delete" title="Hapus">${ICONS.trash}</button>
-                    </div></div>
-                </td>
-            </tr>`;
-        }).join('');
+        }
+
+        tbody.innerHTML = rows;
     };
+
+    function renderUnitRow(unit, bulan, monthData) {
+        const u = monthData[unit];
+        const isSekre = SEKRE_UNITS.includes(unit);
+        const labelStyle = isSekre ? 'padding-left:24px;' : '';
+        const label = isSekre ? unit.replace('Sekretariat - ', '') : unit;
+
+        if (!u) return `
+        <tr>
+            <td style="${labelStyle}">
+                <div style="font-weight:600;">${label}</div>
+                ${isSekre ? '' : `<div style="font-size:12px;color:#64748b;margin-top:2px;">${bulan}</div>`}
+            </td>
+            <td colspan="2" style="color:#94a3b8;font-style:italic;font-size:13px;">Belum dinilai</td>
+            <td><span class="mnv-badge-pending">Pending</span></td>
+            <td colspan="2" style="color:#94a3b8;">—</td>
+            <td>
+                <div class="action-buttons"><div class="btn-icon-group">
+                    <button onclick="mnvOpenInputModal('${esc(unit)}','${bulan}')" class="btn-icon btn-icon-approve" title="Isi Nilai">${ICONS.plus}</button>
+                </div></div>
+            </td>
+        </tr>`;
+
+        const badgeCls = u.total >= 35 ? 'mnv-badge-good' : u.total >= 25 ? 'mnv-badge-mid' : 'mnv-badge-bad';
+        const scoreColor = u.total >= 35 ? '#10b981' : u.total >= 25 ? '#f59e0b' : '#ef4444';
+        const buktiCell = u.linkBukti
+            ? `<a href="${u.linkBukti}" target="_blank" class="mnv-link-btn">${ICONS.link} Lihat</a>`
+            : `<span style="color:#94a3b8;font-size:13px;">—</span>`;
+        return `
+        <tr>
+            <td style="${labelStyle}">
+                <div style="font-weight:600;">${label}</div>
+                ${isSekre ? '' : `<div style="font-size:12px;color:#64748b;margin-top:2px;">${bulan}</div>`}
+            </td>
+            <td style="font-size:13px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;min-width:180px;">
+                    <span style="font-size:11px;color:#64748b;">Waktu: <b>${u.waktu}</b></span>
+                    <span style="font-size:11px;color:#64748b;">Klgkpn: <b>${u.kelengkapan}</b></span>
+                    <span style="font-size:11px;color:#64748b;">Fisik: <b>${u.fisik}</b></span>
+                    <span style="font-size:11px;color:#64748b;">Keuangan: <b>${u.keuangan}</b></span>
+                    <span style="font-size:11px;color:#64748b;">Partisipasi: <b>${u.partisipasi}</b></span>
+                    <span style="font-size:11px;color:#64748b;">Tindak Lanjut: <b>${u.tindakLanjut}</b></span>
+                </div>
+            </td>
+            <td><strong style="font-size:20px;color:${scoreColor};">${u.total}</strong><span style="font-size:11px;color:#94a3b8;">/40</span></td>
+            <td><span class="${badgeCls}">${u.total >= 35 ? 'Baik' : u.total >= 25 ? 'Cukup' : 'Kurang'}</span></td>
+            <td>${buktiCell}</td>
+            <td style="font-size:12px;color:#64748b;">${u.catatan ? (u.catatan.length > 40 ? u.catatan.slice(0, 40) + '…' : u.catatan) : '—'}</td>
+            <td>
+                <div class="action-buttons"><div class="btn-icon-group">
+                    <button onclick="mnvOpenViewModal('${esc(unit)}','${bulan}')" class="btn-icon btn-icon-view" title="Lihat Detail">${ICONS.eye}</button>
+                    <button onclick="mnvOpenInputModal('${esc(unit)}','${bulan}')" class="btn-icon btn-icon-edit" title="Edit Penilaian">${ICONS.edit}</button>
+                    <button onclick="mnvDeleteEntry('${esc(unit)}','${bulan}')" class="btn-icon btn-icon-delete" title="Hapus">${ICONS.trash}</button>
+                </div></div>
+            </td>
+        </tr>`;
+    }
 
     function esc(s) { return s.replace(/'/g, "\\'"); }
 
@@ -247,6 +314,9 @@
 
         const st = u._state || {};
 
+        // REVISI #2: label fisik menampilkan keterangan efisiensi bila berlaku
+        const fisikEfisiensi = !st.fisikOk && st.selDeviasiFisik === 'efisiensi';
+
         const buktiSection = u.linkBukti ? `
             <div class="mnv-detail-section">
                 <div class="mnv-detail-section-title"><span style="color:#3b82f6;">${ICONS.link}</span> File Bukti</div>
@@ -260,6 +330,8 @@
                 </a>
             </div>` : '';
 
+        const displayUnit = SEKRE_UNITS.includes(unit) ? unit.replace('Sekretariat - ', 'Sekretariat / ') : unit;
+
         const modal = document.createElement('div');
         modal.id = 'mnv-viewModal';
         modal.className = 'modal-overlay';
@@ -270,8 +342,6 @@
                 <h2 class="modal-title">Detail Penilaian Monev</h2>
             </div>
             <div class="modal-content" style="display:flex;flex-direction:column;gap:14px;">
-
-                <!-- Info unit + skor besar -->
                 <div class="mnv-detail-section" style="flex-direction:row;align-items:flex-start;gap:14px;flex-wrap:wrap;">
                     <div style="flex:1;min-width:160px;">
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
@@ -280,7 +350,7 @@
                             </div>
                             <div>
                                 <div style="font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Unit / Bidang</div>
-                                <div style="font-size:14px;font-weight:700;color:#1e293b;">${unit}</div>
+                                <div style="font-size:14px;font-weight:700;color:#1e293b;">${displayUnit}</div>
                             </div>
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;">
@@ -300,10 +370,8 @@
                     </div>
                 </div>
 
-                <!-- Rincian per indikator -->
                 <div class="mnv-detail-section">
                     <div class="mnv-detail-section-title"><span style="color:#3b82f6;">📊</span> Rincian Penilaian</div>
-
                     <div class="krs-score-row">
                         <div class="krs-score-row-label"><span class="krs-score-badge" style="background:#eff6ff;color:#3b82f6;">1</span>Ket. Waktu</div>
                         <div class="krs-score-row-detail"><div class="krs-score-sub-row"><span>Tepat waktu</span>${yesNo(st.waktuOk)}</div></div>
@@ -316,7 +384,12 @@
                     </div>
                     <div class="krs-score-row">
                         <div class="krs-score-row-label"><span class="krs-score-badge" style="background:#f0fdf4;color:#10b981;">3</span>Capaian Fisik</div>
-                        <div class="krs-score-row-detail"><div class="krs-score-sub-row"><span>Sesuai target</span>${yesNo(st.fisikOk)}</div></div>
+                        <div class="krs-score-row-detail">
+                            <div class="krs-score-sub-row">
+                                <span>Sesuai target${fisikEfisiensi ? ' <span style="font-size:10px;background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:8px;font-weight:600;">Efisiensi ✓</span>' : ''}</span>
+                                ${fisikEfisiensi ? `<span style="display:inline-flex;align-items:center;gap:4px;color:#10b981;font-weight:600;font-size:13px;">${ICONS.check} Efisiensi</span>` : yesNo(st.fisikOk)}
+                            </div>
+                        </div>
                         <div class="krs-score-chip" style="background:#f0fdf4;color:#10b981;">${u.fisik}/10</div>
                     </div>
                     <div class="krs-score-row">
@@ -343,7 +416,6 @@
                 </div>` : ''}
 
                 ${buktiSection}
-
             </div>
             <div class="modal-footer">
                 <button onclick="document.getElementById('mnv-viewModal').remove()" class="btn" style="flex:1;">Tutup</button>
@@ -441,6 +513,8 @@
         selectedBuktiFile = null; selectedBuktiBase64 = null; existingBuktiDeleted = false;
         existingLinkBukti = isEdit && existing?.linkBukti ? existing.linkBukti : '';
 
+        const displayLabel = SEKRE_UNITS.includes(unit) ? unit.replace('Sekretariat - ', 'Sekretariat / ') : unit;
+
         const modal = document.createElement('div');
         modal.id = 'mnv-assessModal';
         modal.className = 'modal-overlay';
@@ -453,7 +527,7 @@
             </div>
             <div class="modal-content">
                 <div class="info-box" style="margin-bottom:16px;">
-                    <p style="font-weight:600;margin:0 0 4px;">${unit}</p>
+                    <p style="font-weight:600;margin:0 0 4px;">${displayLabel}</p>
                     <p style="font-size:13px;color:#64748b;margin:0;">Penilaian Monitoring &amp; Evaluasi · ${bulan}</p>
                     ${isEdit ? '<span style="display:inline-block;margin-top:6px;background:#dbeafe;color:#1e40af;font-size:11px;font-weight:600;padding:3px 10px;border-radius:10px;">✏️ Mode Edit</span>' : ''}
                 </div>
@@ -498,7 +572,7 @@
                     </div>
                 </div>
 
-                <!-- 3. Capaian Fisik -->
+                <!-- 3. Capaian Fisik — REVISI #2: tambah opsi efisiensi -->
                 <div class="mnv-score-section" style="border-left-color:#10b981;">
                     <div class="score-section-title">3️⃣ Capaian Fisik <span style="font-weight:400;color:#64748b;font-size:13px;">(Maks 10 poin)</span></div>
                     <div class="mnv-check-item mnv-check-checked" id="mnv-check-fisik-item" onclick="mnvToggleCheck('fisik',event)">
@@ -509,7 +583,10 @@
                     <div class="mnv-sub-group ${state.fisikOk ? '' : 'show'}" id="mnv-sub-fisik">
                         <label class="input-label">📊 Kategori deviasi fisik</label>
                         <select class="form-input" id="mnv-sel-deviasi-fisik" onchange="mnvUpdateModalScore()">
-                            <option value="5" ${(state.selDeviasiFisik || '5') === '5' ? 'selected' : ''}>Deviasi ≥ 5% – &lt; 10% (−5 poin → skor 5)</option>
+                            <option value="efisiensi" ${(state.selDeviasiFisik) === 'efisiensi' ? 'selected' : ''}>
+                                Deviasi karena Efisiensi (skor tetap 10 ✓)
+                            </option>
+                            <option value="5" ${(!state.selDeviasiFisik || state.selDeviasiFisik === '5') ? 'selected' : ''}>Deviasi ≥ 5% – &lt; 10% (−5 poin → skor 5)</option>
                             <option value="8" ${(state.selDeviasiFisik) === '8' ? 'selected' : ''}>Deviasi ≥ 10% (−8 poin → skor 2)</option>
                         </select>
                     </div>
@@ -640,7 +717,6 @@
         modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
         document.body.appendChild(modal);
 
-        // Sync check states after DOM render
         ['waktu', 'kelengkapan', 'fisik', 'keuangan', 'partisipasi', 'tindaklanjut'].forEach(k => window.mnvSyncCheckItem(k));
         window.mnvUpdateModalScore();
     };
@@ -649,7 +725,7 @@
         document.getElementById('mnv-assessModal')?.remove();
     };
 
-    // ─── HELPER: baca file sebagai base64 (Promise) ───────────────
+    // ─── HELPER: baca file sebagai base64 ────────────────────
     function mnvReadFileAsBase64(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -659,6 +735,8 @@
         });
     }
 
+    // ─── SUBMIT ───────────────────────────────────────────────
+    // REVISI #1: Perbaiki logika linkBukti agar hapus bukti benar-benar kosong
     window.mnvSubmitInputNilai = async function () {
         const bulan = document.getElementById('mnv-select-bulan-input').value;
         const unit = document.getElementById('mnv-input-unit').value;
@@ -675,7 +753,21 @@
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<span class="spinner spinner-sm"></span> Menyimpan...';
 
-        // ── Payload dasar ──────────────────────────────────────────────────────────
+        // Tentukan linkBukti yang akan dikirim ke server SEBELUM hit API
+        // Ini penting agar server menyimpan string kosong "" bila bukti dihapus
+        let linkBuktiToSend = '';
+        if (!selectedBuktiFile) {
+            // Tidak ada file baru
+            if (existingBuktiDeleted) {
+                // User sengaja hapus bukti → kirim string kosong
+                linkBuktiToSend = '';
+            } else {
+                // Pertahankan bukti lama
+                linkBuktiToSend = existingLinkBukti || '';
+            }
+        }
+        // Jika ada selectedBuktiFile, linkBuktiToSend akan diisi setelah upload berhasil
+
         const payload = {
             action: 'uploadAndSave',
             bulan, unit,
@@ -690,24 +782,21 @@
             penilai: currentUser.name || 'Admin',
             fileName: '',
             mimeType: '',
-            fileData: ''
+            fileData: '',
+            // REVISI #1: Kirim linkBukti eksplisit agar server bisa simpan ke log
+            existingLinkBukti: linkBuktiToSend
         };
 
-        // ── FIX BUG 1 & 2: await FileReader tuntas, baru isi payload ───────────────
+        // Proses file baru
         if (selectedBuktiFile) {
             try {
                 window.mnvSetUploadProgress(20, 'Membaca file...');
-
-                // Gunakan fungsi helper yang sudah ada — ini yang benar
                 const base64 = await mnvReadFileAsBase64(selectedBuktiFile);
-
                 const ext = selectedBuktiFile.name.split('.').pop().toLowerCase();
                 const safeUnit = unit.replace(/[^a-zA-Z0-9]/g, '_');
-
                 payload.fileName = `MONEV_${bulan}_${safeUnit}_${Date.now()}.${ext}`;
                 payload.mimeType = selectedBuktiFile.type;
-                payload.fileData = base64;   // ← PERBAIKAN: pakai hasil await, bukan selectedBuktiBase64
-
+                payload.fileData = base64;
             } catch (readErr) {
                 if (window.showToast) showToast('Gagal membaca file: ' + readErr.message, 'error');
                 submitBtn.disabled = false;
@@ -716,10 +805,9 @@
             }
         }
 
-        // ── Kirim ke server ────────────────────────────────────────────────────────
         window.mnvSetUploadProgress(selectedBuktiFile ? 50 : 30, 'Mengirim ke server...');
 
-        let linkBukti = '';
+        let linkBuktiFinal = linkBuktiToSend; // default: nilai yang sudah ditetapkan di atas
         try {
             const result = await callAPIPost(payload);
             console.log('Response dari server:', result);
@@ -727,17 +815,12 @@
             if (result && result.status === 'success') {
                 window.mnvSetUploadProgress(100, 'Berhasil!');
 
-                // ── FIX BUG 3: linkBukti selalu dari response server ─────────────
                 if (selectedBuktiFile) {
-                    // Upload baru — pakai link yang baru dikembalikan server
-                    linkBukti = result.linkBukti || '';
-                } else if (!existingBuktiDeleted && existingLinkBukti) {
-                    // Tidak ada file baru dan user tidak hapus bukti lama
-                    linkBukti = existingLinkBukti;
-                } else {
-                    // User hapus bukti lama, tidak upload baru
-                    linkBukti = '';
+                    // Ambil link baru dari server
+                    linkBuktiFinal = result.linkBukti || '';
                 }
+                // Jika tidak ada file baru, linkBuktiFinal sudah benar dari langkah sebelumnya
+                // (kosong jika dihapus, atau nilai lama jika dipertahankan)
 
             } else {
                 if (window.showToast) showToast('Gagal simpan: ' + (result?.message || 'Unknown error'), 'error');
@@ -746,7 +829,6 @@
                 window.mnvHideUploadProgress();
                 return;
             }
-
         } catch (err) {
             if (window.showToast) showToast('Gagal menghubungi server: ' + err.message, 'error');
             submitBtn.disabled = false;
@@ -755,10 +837,10 @@
             return;
         }
 
-        // ── FIX BUG 4: simpan ke cache lokal SETELAH dapat linkBukti yang benar ──
+        // Simpan ke cache lokal dengan linkBuktiFinal yang sudah pasti benar
         const localData = getLocalData();
         if (!localData[bulan]) localData[bulan] = {};
-        localData[bulan][unit] = { ...scores, catatan, linkBukti, _state: state };
+        localData[bulan][unit] = { ...scores, catatan, linkBukti: linkBuktiFinal, _state: state };
         setLocalData(localData);
 
         window.mnvHideUploadProgress();
@@ -766,9 +848,9 @@
 
         if (window.showToast) showToast(`Nilai ${unit} bulan ${bulan} berhasil disimpan!`, 'success');
 
-        // Reload dari server untuk sinkronisasi penuh (opsional tapi disarankan)
         window.mnvLoadDataFromServer();
     };
+
     // ─── DELETE ENTRY ─────────────────────────────────────────
     window.mnvDeleteEntry = function (unit, bulan) {
         showConfirmModal({
@@ -797,6 +879,7 @@
     };
 
     // ─── REKAP ────────────────────────────────────────────────
+    // REVISI #3: Rekap tampilkan sekre per sub-bagian + sub-total
     window.mnvRenderRekap = function () {
         const ct1 = document.getElementById('mnv-chartIndikator');
         const ct2 = document.getElementById('mnv-chartTotal');
@@ -807,22 +890,52 @@
         const data = getLocalData();
         const monthData = (bulan && data[bulan]) ? data[bulan] : {};
 
-        const w = UNITS.map(u => (monthData[u]?.waktu) || 0);
-        const kl = UNITS.map(u => (monthData[u]?.kelengkapan) || 0);
-        const f = UNITS.map(u => (monthData[u]?.fisik) || 0);
-        const ke = UNITS.map(u => (monthData[u]?.keuangan) || 0);
-        const p = UNITS.map(u => (monthData[u]?.partisipasi) || 0);
-        const tl = UNITS.map(u => (monthData[u]?.tindakLanjut) || 0);
-        const tot = UNITS.map(u => (monthData[u]?.total) || 0);
+        // Helper ambil nilai per unit
+        const v = (unit, field) => (monthData[unit]?.[field]) || 0;
 
-        tbody.innerHTML = `
-        <tr><td>1</td><td style="font-weight:500;text-align:left;">Ketepatan Waktu</td>${w.map(v => `<td class="${v < 5 ? 'rekap-bad' : 'rekap-good'}">${v}</td>`).join('')}</tr>
-        <tr><td>2</td><td style="font-weight:500;text-align:left;">Kelengkapan Data</td>${kl.map(v => `<td class="${v < 5 ? 'rekap-bad' : 'rekap-good'}">${v}</td>`).join('')}</tr>
-        <tr><td>3</td><td style="font-weight:500;text-align:left;">Capaian Fisik</td>${f.map(v => `<td class="${v < 10 ? 'rekap-bad' : 'rekap-good'}">${v}</td>`).join('')}</tr>
-        <tr><td>4</td><td style="font-weight:500;text-align:left;">Capaian Keuangan</td>${ke.map(v => `<td class="${v < 10 ? 'rekap-bad' : 'rekap-good'}">${v}</td>`).join('')}</tr>
-        <tr><td>5</td><td style="font-weight:500;text-align:left;">Partisipasi PPTK</td>${p.map(v => `<td class="${v < 5 ? 'rekap-bad' : 'rekap-good'}">${v}</td>`).join('')}</tr>
-        <tr><td>6</td><td style="font-weight:500;text-align:left;">Tindak Lanjut</td>${tl.map(v => `<td class="${v < 5 ? 'rekap-bad' : 'rekap-good'}">${v}</td>`).join('')}</tr>
-        <tr><td></td><td style="font-weight:700;text-align:left;">TOTAL NILAI</td>${tot.map(v => `<td style="font-weight:700;color:${v >= 35 ? '#065f46' : v >= 25 ? '#92400e' : '#991b1b'};">${v}</td>`).join('')}</tr>`;
+        // Data untuk chart — semua 8 unit (termasuk 3 sekre)
+        const w   = UNITS.map(u => v(u, 'waktu'));
+        const kl  = UNITS.map(u => v(u, 'kelengkapan'));
+        const f   = UNITS.map(u => v(u, 'fisik'));
+        const ke  = UNITS.map(u => v(u, 'keuangan'));
+        const p   = UNITS.map(u => v(u, 'partisipasi'));
+        const tl  = UNITS.map(u => v(u, 'tindakLanjut'));
+        const tot = UNITS.map(u => v(u, 'total'));
+
+        // Non-sekre rows
+        const nonSekre = UNITS.filter(u => !SEKRE_UNITS.includes(u));
+        const nonSekreTbodyRows = buildRekapRows(nonSekre, monthData, false);
+
+        // Sekre rows + sub-total
+        const sekreRows = buildRekapRows(SEKRE_UNITS, monthData, true);
+        const sekreDinilai = SEKRE_UNITS.map(u => monthData[u]).filter(Boolean);
+        let sekreSubTotal = '';
+        if (sekreDinilai.length > 0) {
+            const avg = field => (sekreDinilai.reduce((a, u) => a + (u[field] || 0), 0) / sekreDinilai.length).toFixed(1);
+            const avgTot = parseFloat((sekreDinilai.reduce((a, u) => a + (u.total || 0), 0) / sekreDinilai.length).toFixed(1));
+            const totColor = avgTot >= 35 ? '#065f46' : avgTot >= 25 ? '#92400e' : '#991b1b';
+            sekreSubTotal = `
+            <tr style="background:#dbeafe;border-top:2px solid #93c5fd;">
+                <td colspan="2" style="font-weight:700;color:#1e3a8a;font-size:12px;text-align:left;padding:10px 12px;">
+                    ∑ Rata-rata Sekretariat
+                </td>
+                <td class="rekap-good" style="font-size:12px;">${avg('waktu')}</td>
+                <td class="rekap-good" style="font-size:12px;">${avg('kelengkapan')}</td>
+                <td class="rekap-good" style="font-size:12px;">${avg('fisik')}</td>
+                <td class="rekap-good" style="font-size:12px;">${avg('keuangan')}</td>
+                <td class="rekap-good" style="font-size:12px;">${avg('partisipasi')}</td>
+                <td class="rekap-good" style="font-size:12px;">${avg('tindakLanjut')}</td>
+                <td style="font-weight:700;color:${totColor};font-size:14px;">${avgTot}</td>
+            </tr>`;
+        }
+
+        tbody.innerHTML = nonSekreTbodyRows +
+            `<tr style="background:#f0f4fa;">
+                <td colspan="9" style="padding:6px 12px;font-size:12px;font-weight:700;color:#1e40af;letter-spacing:.04em;text-transform:uppercase;">
+                    📂 Sekretariat — Breakdown Sub-Bagian
+                </td>
+            </tr>` +
+            sekreRows + sekreSubTotal;
 
         if (chartIndikator) chartIndikator.destroy();
         if (chartTotal) chartTotal.destroy();
@@ -831,22 +944,73 @@
             type: 'bar',
             data: {
                 labels: SHORT_UNITS, datasets: [
-                    { label: 'Ket.Waktu', data: w, backgroundColor: '#3b82f6' },
-                    { label: 'Kelengkapan', data: kl, backgroundColor: '#8b5cf6' },
-                    { label: 'Fisik', data: f, backgroundColor: '#10b981' },
-                    { label: 'Keuangan', data: ke, backgroundColor: '#f59e0b' },
-                    { label: 'Partisipasi', data: p, backgroundColor: '#ec4899' },
-                    { label: 'Tindak Lanjut', data: tl, backgroundColor: '#06b6d4' }
+                    { label: 'Ket.Waktu',    data: w,  backgroundColor: '#3b82f6' },
+                    { label: 'Kelengkapan',  data: kl, backgroundColor: '#8b5cf6' },
+                    { label: 'Fisik',        data: f,  backgroundColor: '#10b981' },
+                    { label: 'Keuangan',     data: ke, backgroundColor: '#f59e0b' },
+                    { label: 'Partisipasi',  data: p,  backgroundColor: '#ec4899' },
+                    { label: 'Tindak Lanjut',data: tl, backgroundColor: '#06b6d4' }
                 ]
             },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, max: 40 } } }
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: true, position: 'bottom' } },
+                scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, max: 40 } }
+            }
         });
+
         chartTotal = new Chart(ct2.getContext('2d'), {
             type: 'bar',
-            data: { labels: SHORT_UNITS, datasets: [{ label: 'Total', data: tot, borderRadius: 6, backgroundColor: tot.map(v => v >= 35 ? '#10b981' : v >= 25 ? '#f59e0b' : '#ef4444') }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `Nilai: ${ctx.parsed.y}/40` } } }, scales: { y: { beginAtZero: true, max: 40, ticks: { stepSize: 5 } } } }
+            data: {
+                labels: SHORT_UNITS,
+                datasets: [{
+                    label: 'Total', data: tot, borderRadius: 6,
+                    backgroundColor: tot.map(v => v >= 35 ? '#10b981' : v >= 25 ? '#f59e0b' : '#ef4444')
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: ctx => `Nilai: ${ctx.parsed.y}/40` } }
+                },
+                scales: { y: { beginAtZero: true, max: 40, ticks: { stepSize: 5 } } }
+            }
         });
     };
+
+    function buildRekapRows(units, monthData, isSekre) {
+        const v = (u, f) => (monthData[u]?.[f]) || 0;
+        return units.map(unit => {
+            const label = isSekre ? unit.replace('Sekretariat - ', '') : unit;
+            const w   = v(unit, 'waktu');
+            const kl  = v(unit, 'kelengkapan');
+            const f_  = v(unit, 'fisik');
+            const ke  = v(unit, 'keuangan');
+            const pp  = v(unit, 'partisipasi');
+            const tl_ = v(unit, 'tindakLanjut');
+            const tot = v(unit, 'total');
+            const totColor = tot >= 35 ? '#065f46' : tot >= 25 ? '#92400e' : '#991b1b';
+            const padLeft = isSekre ? 'padding-left:24px;' : '';
+            return `
+            <tr>
+                <td style="font-weight:500;text-align:left;${padLeft}">${label}</td>
+                <td style="text-align:left;font-size:11px;color:#64748b;">${bulanLabel()}</td>
+                <td class="${w  < 5  ? 'rekap-bad' : 'rekap-good'}">${w}</td>
+                <td class="${kl < 5  ? 'rekap-bad' : 'rekap-good'}">${kl}</td>
+                <td class="${f_ < 10 ? 'rekap-bad' : 'rekap-good'}">${f_}</td>
+                <td class="${ke < 10 ? 'rekap-bad' : 'rekap-good'}">${ke}</td>
+                <td class="${pp < 5  ? 'rekap-bad' : 'rekap-good'}">${pp}</td>
+                <td class="${tl_< 5  ? 'rekap-bad' : 'rekap-good'}">${tl_}</td>
+                <td style="font-weight:700;color:${totColor};">${tot}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function bulanLabel() {
+        const el = document.getElementById('mnv-select-bulan-rekap');
+        return el?.value || '—';
+    }
 
     // ─── FILE HANDLING ────────────────────────────────────────
     window.mnvHandleBuktiFileSelect = function (event) {
@@ -928,12 +1092,9 @@
         section.innerHTML = `
 <style>
 /* ─── Monev: setema kearsipan ─────────────────── */
-
-/* Score section dalam modal */
 .mnv-score-section { background:#f8fafc; padding:16px; border-radius:8px; margin-bottom:14px; border-left:4px solid #3b82f6; }
 .mnv-score-section .score-section-title { font-weight:600; color:#1e293b; margin-bottom:12px; font-size:15px; }
 
-/* Check item */
 .mnv-check-item { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border-radius:8px; cursor:pointer; transition:background .15s; border:1.5px solid transparent; }
 .mnv-check-checked  { background:#f0fdf4; border-color:#bbf7d0; }
 .mnv-check-unchecked{ background:#fff7ed; border-color:#fed7aa; }
@@ -946,11 +1107,9 @@
 .mnv-check-badge { font-size:12px; font-weight:600; padding:3px 10px; border-radius:10px; background:#dcfce7; color:#15803d; white-space:nowrap; flex-shrink:0; margin-top:2px; }
 .mnv-check-unchecked .mnv-check-badge { background:#fee2e2; color:#991b1b; }
 
-/* Sub group */
 .mnv-sub-group { display:none; margin-top:10px; padding:12px; background:white; border-radius:7px; border:1px solid #e5e7eb; }
 .mnv-sub-group.show { display:block; }
 
-/* Score preview (setema kearsipan) */
 .score-preview { background:white; padding:20px; border-radius:8px; margin:16px 0; border:2px solid #e5e7eb; }
 .score-preview-title { font-size:13px; color:#64748b; margin-bottom:8px; text-align:center; text-transform:uppercase; letter-spacing:.05em; }
 .score-preview-value { font-size:36px; font-weight:700; color:#0f172a; text-align:center; }
@@ -959,24 +1118,20 @@
 .score-item-label { font-size:10px; color:#64748b; margin-bottom:4px; }
 .score-item-value { font-size:18px; font-weight:700; color:#1e293b; }
 
-/* Info box */
 .info-box { background:#f8fafc; border:1px solid #e5e7eb; border-radius:6px; padding:14px 16px; }
 .alert { padding:12px 16px; border-radius:6px; font-size:13px; }
 .alert-info { background:#eff6ff; border-left:4px solid #3b82f6; color:#1e3a8a; }
 .form-textarea { width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:6px; font-size:14px; font-family:inherit; resize:vertical; outline:none; transition:border-color .15s; box-sizing:border-box; }
 .form-textarea:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.1); }
 
-/* Badges */
 .mnv-badge-good    { background:#dcfce7; color:#15803d; padding:4px 10px; border-radius:20px; font-size:12px; font-weight:600; white-space:nowrap; }
 .mnv-badge-mid     { background:#fef9c3; color:#a16207; padding:4px 10px; border-radius:20px; font-size:12px; font-weight:600; white-space:nowrap; }
 .mnv-badge-bad     { background:#fee2e2; color:#991b1b; padding:4px 10px; border-radius:20px; font-size:12px; font-weight:600; white-space:nowrap; }
 .mnv-badge-pending { background:#fef9c3; color:#a16207; padding:4px 10px; border-radius:20px; font-size:12px; font-weight:600; white-space:nowrap; }
 
-/* Link button */
 .mnv-link-btn { display:inline-flex; align-items:center; gap:4px; font-size:12px; color:#3b82f6; text-decoration:none; font-weight:600; }
 .mnv-link-btn:hover { text-decoration:underline; }
 
-/* Action buttons (setema kearsipan) */
 .action-buttons { display:flex; gap:4px; }
 .btn-icon-group { display:flex; gap:4px; }
 .btn-icon { width:30px; height:30px; display:inline-flex; align-items:center; justify-content:center; border-radius:7px; border:none; cursor:pointer; transition:background .15s, transform .1s; }
@@ -990,11 +1145,9 @@
 .btn-icon-delete  { background:#fee2e2; color:#991b1b; }
 .btn-icon-delete:hover { background:#fecaca; }
 
-/* Detail modal (setema kearsipan) */
 .mnv-detail-section { background:#f8fafc; border-radius:10px; padding:14px; border:1px solid #f1f5f9; display:flex; flex-direction:column; gap:8px; }
 .mnv-detail-section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#94a3b8; margin-bottom:4px; display:flex; align-items:center; gap:6px; }
 
-/* Score rows (dari kearsipan, digunakan di detail monev) */
 .krs-score-row { display:flex; align-items:flex-start; gap:10px; padding:10px; background:white; border-radius:8px; border:1px solid #f1f5f9; }
 .krs-score-row-label { display:flex; align-items:center; gap:6px; font-weight:600; font-size:12px; color:#1e293b; min-width:100px; flex-shrink:0; }
 .krs-score-badge { width:20px; height:20px; border-radius:50%; font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
@@ -1002,7 +1155,6 @@
 .krs-score-sub-row { display:flex; align-items:center; justify-content:space-between; font-size:12.5px; color:#64748b; }
 .krs-score-chip { font-size:14px; font-weight:800; padding:5px 10px; border-radius:8px; flex-shrink:0; }
 
-/* File item (dari kearsipan) */
 .krs-file-item { display:flex; align-items:center; gap:10px; padding:10px 12px; background:white; border:1px solid #e2e8f0; border-radius:8px; text-decoration:none; color:inherit; transition:border-color .15s, box-shadow .15s; }
 .krs-file-item:hover { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.08); }
 .krs-file-icon { width:32px; height:32px; border-radius:8px; background:#eff6ff; color:#3b82f6; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
@@ -1012,22 +1164,25 @@
 .krs-file-arrow { font-size:18px; color:#cbd5e1; flex-shrink:0; }
 .krs-file-item:hover .krs-file-arrow { color:#3b82f6; }
 
-/* krs-detail-field-icon digunakan juga di monev viewModal */
 .krs-detail-field-icon { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+
+/* Rekap table cells */
+.rekap-table td, .rekap-table th { padding:8px 10px; text-align:center; border-bottom:1px solid #f1f5f9; font-size:12px; }
+.rekap-table th { background:#f8fafc; font-weight:700; font-size:11px; color:#64748b; text-align:center; }
+.rekap-table td:first-child, .rekap-table th:first-child { text-align:left; }
+.rekap-good { color:#065f46; background:#f0fdf4; font-weight:600; }
+.rekap-bad  { color:#991b1b; background:#fff1f2; font-weight:600; }
 </style>
 
 <div class="container">
 
-    <!-- SECTION HEADER (setema kearsipan) -->
     <div class="section-page-header">
         <h1 class="section-page-title">Penilaian Monitoring &amp; Evaluasi</h1>
         <p class="section-page-subtitle">Sistem penilaian 6 indikator: Ketepatan Waktu, Kelengkapan, Fisik, Keuangan, Partisipasi, Tindak Lanjut</p>
     </div>
 
-    <!-- STATUS BAR -->
     <div class="last-updated-bar" id="mnv-last-updated-bar"></div>
 
-    <!-- STATS GRID -->
     <div class="stats-grid">
         <div class="stat-card" style="border-left:4px solid #1F4E79;">
             <div class="stat-label">Skor Maksimum</div>
@@ -1046,12 +1201,11 @@
         </div>
         <div class="stat-card" style="border-left:4px solid #ef4444;">
             <div class="stat-label">Unit Belum Dinilai</div>
-            <div class="stat-value" id="mnv-units-pending">6</div>
+            <div class="stat-value" id="mnv-units-pending">${UNITS.length}</div>
             <div class="stat-footer">Menunggu penilaian</div>
         </div>
     </div>
 
-    <!-- TABS -->
     <div class="tabs">
         <button class="tab active" onclick="mnvSwitchTab('input', event)">📥 Input Penilaian</button>
         <button class="tab" onclick="mnvSwitchTab('rekap', event)">📊 Rekapitulasi</button>
@@ -1068,8 +1222,7 @@
                         ${MONTHS.map(m => `<option value="${m}">${m.charAt(0) + m.slice(1).toLowerCase()}</option>`).join('')}
                     </select>
                     <button onclick="mnvLoadDataFromServer()" class="btn btn-sm" title="Refresh Data">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                        Refresh
+                        ${ICONS.refresh} Refresh
                     </button>
                 </div>
             </div>
@@ -1077,7 +1230,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Unit / Bulan</th>
+                            <th>Unit / Bidang</th>
                             <th>Rincian Skor</th>
                             <th>Total</th>
                             <th>Status</th>
@@ -1121,16 +1274,22 @@
                     </div>
                 </div>
                 <div style="overflow-x:auto;margin-top:16px;">
-                    <table class="rekap-table">
+                    <table class="rekap-table" style="width:100%;border-collapse:collapse;">
                         <thead>
                             <tr>
-                                <th>No</th><th>Indikator Penilaian</th>
-                                <th>BLUT</th><th>Bid. Kewirausahaan</th><th>Bid. Koperasi</th>
-                                <th>Bid. UKM</th><th>Bid. Usaha Mikro</th><th>Sekretariat</th>
+                                <th style="text-align:left;min-width:140px;">Unit / Bidang</th>
+                                <th>Bulan</th>
+                                <th>Waktu<br><small style="opacity:.6">/5</small></th>
+                                <th>Klgkpn<br><small style="opacity:.6">/5</small></th>
+                                <th>Fisik<br><small style="opacity:.6">/10</small></th>
+                                <th>Keuangan<br><small style="opacity:.6">/10</small></th>
+                                <th>Partisipasi<br><small style="opacity:.6">/5</small></th>
+                                <th>Tindak Lanjut<br><small style="opacity:.6">/5</small></th>
+                                <th>Total<br><small style="opacity:.6">/40</small></th>
                             </tr>
                         </thead>
                         <tbody id="mnv-rekap-tbody">
-                            <tr><td colspan="8" style="text-align:center;padding:40px;color:#94a3b8;">
+                            <tr><td colspan="9" style="text-align:center;padding:40px;color:#94a3b8;">
                                 <div class="spinner"></div>
                                 <div style="margin-top:12px;">Memuat data...</div>
                             </td></tr>
