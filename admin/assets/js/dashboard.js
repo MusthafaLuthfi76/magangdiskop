@@ -173,12 +173,8 @@
         var srcLbl = document.getElementById('db-spjSourceLabel');
         if (!bar) return;
         if (spjDataSource === 'api-monthly') {
-            bar.className = 'spj-status-bar success'; bar.style.display = 'flex';
-            msg.textContent = '✅ Data SPJ Keuangan berhasil diambil langsung dari Google Spreadsheet (sheet bulanan).';
             srcLbl.textContent = 'Google Spreadsheet (Sheet Bulanan)'; srcLbl.style.color = '#065f46';
         } else if (spjDataSource === 'api-rekap') {
-            bar.className = 'spj-status-bar success'; bar.style.display = 'flex';
-            msg.textContent = '✅ Data SPJ Keuangan berhasil diambil dari Google Spreadsheet (sheet rekap).';
             srcLbl.textContent = 'Google Spreadsheet (Sheet Rekap)'; srcLbl.style.color = '#065f46';
         } else if (spjDataSource === 'local') {
             bar.className = 'spj-status-bar'; bar.style.display = 'flex';
