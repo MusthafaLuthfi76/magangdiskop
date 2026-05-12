@@ -369,7 +369,17 @@
         const yesNo = (val) => val
             ? `<span style="display:inline-flex;align-items:center;gap:4px;color:#10b981;font-weight:600;font-size:13px;">${ICONS.check} Terpenuhi</span>`
             : `<span style="display:inline-flex;align-items:center;gap:4px;color:#ef4444;font-weight:600;font-size:13px;">${ICONS.x} Tidak</span>`;
-        const st = u._state || {};
+        const st = u._state || {
+            waktuOk: Number(u.waktu) === 5,
+            kelengkapanOk: Number(u.kelengkapan) === 5,
+            fisikOk: Number(u.fisik) === 10,
+            keuanganOk: Number(u.keuangan) === 10,
+            partisipasiOk: Number(u.partisipasi) === 5,
+            tindakLanjutOk: Number(u.tindakLanjut) === 5,
+
+            selDeviasiFisik:
+                Number(u.fisik) === 10 ? 'efisiensi' : '5'
+        };
         const fisikEfisiensi = !st.fisikOk && st.selDeviasiFisik === 'efisiensi';
         const links = parseLinks(u.linkBukti);
         const buktiSection = links.length > 0 ? `<div class="mnv-detail-section"><div class="mnv-detail-section-title">${ICONS.link} File Bukti (${links.length} file)</div>${links.map((link, i) => `<a href="${link}" target="_blank" rel="noopener noreferrer" class="krs-file-item" style="margin-top:6px;"><div class="krs-file-icon">${ICONS.link}</div><div class="krs-file-info"><div class="krs-file-label">Bukti Penilaian Monev #${i + 1}</div><div class="krs-file-url">${link.length > 55 ? link.slice(0, 55) + '…' : link}</div></div><div class="krs-file-arrow">›</div></a>`).join('')}</div>` : '';
@@ -489,11 +499,53 @@
         const data = getLocalData();
         const existing = (data[bulan] || {})[unit];
         const isEdit = !!existing;
-        const state = (isEdit && existing._state) ? existing._state : {
-            waktuOk: true, kelengkapanOk: true, fisikOk: true, keuanganOk: true,
-            partisipasiOk: true, tindakLanjutOk: true,
-            selKeterlambatan: '3', selKualitas: '2', selDeviasiFisik: '5',
-            selDeviasiKeuangan: '5', selPartisipasi: 'diwakili'
+        const state = (isEdit && existing)
+        ? (
+            existing._state
+            ? existing._state
+            : {
+                waktuOk: Number(existing.waktu) === 5,
+                kelengkapanOk: Number(existing.kelengkapan) === 5,
+                fisikOk: Number(existing.fisik) === 10,
+                keuanganOk: Number(existing.keuangan) === 10,
+                partisipasiOk: Number(existing.partisipasi) === 5,
+                tindakLanjutOk: Number(existing.tindakLanjut) === 5,
+
+                selKeterlambatan:
+                    Number(existing.waktu) === 2 ? '3' : '5',
+
+                selKualitas:
+                    Number(existing.kelengkapan) === 3 ? '2' : '3',
+
+                selDeviasiFisik:
+                    Number(existing.fisik) === 10
+                        ? 'efisiensi'
+                        : Number(existing.fisik) === 5
+                            ? '5'
+                            : '8',
+
+                selDeviasiKeuangan:
+                    Number(existing.keuangan) === 5 ? '5' : '8',
+
+                selPartisipasi:
+                    Number(existing.partisipasi) === 3
+                        ? 'diwakili'
+                        : 'tidak-hadir'
+            }
+        )
+        : {
+            waktuOk: true,
+            kelengkapanOk: true,
+            fisikOk: true,
+            keuanganOk: true,
+            partisipasiOk: true,
+            tindakLanjutOk: true,
+
+            selKeterlambatan: '3',
+            selKualitas: '2',
+            selDeviasiFisik: '5',
+            selDeviasiKeuangan: '5',
+            selPartisipasi: 'diwakili'
         };
 
         document.getElementById('mnv-assessModal')?.remove();
