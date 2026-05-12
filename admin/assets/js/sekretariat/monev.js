@@ -214,8 +214,14 @@
         // Accordion header sekretariat
         const sekreVals = SEKRE_UNITS.map(u => monthData[u]).filter(Boolean);
         const sekreDinilai = sekreVals.length;
-        const sekreAvg = sekreDinilai > 0 ? (sekreVals.reduce((a, u) => a + (u.total || 0), 0) / sekreDinilai).toFixed(1) : '—';
-        const sekreBadgeCls = sekreDinilai === 0 ? 'mnv-badge-pending' : parseFloat(sekreAvg) >= 35 ? 'mnv-badge-good' : parseFloat(sekreAvg) >= 25 ? 'mnv-badge-mid' : 'mnv-badge-bad';
+        // FALLBACK: kalau tidak ada data sub-bagian individual, ambil dari rata-rata sheet bulan
+        const sekreFallback = monthData['Sekretariat'];
+        const sekreAvgNum = sekreDinilai > 0
+            ? sekreVals.reduce((a, u) => a + (u.total || 0), 0) / sekreDinilai
+            : (sekreFallback ? sekreFallback.total : null);
+        const sekreAvg = sekreAvgNum !== null ? parseFloat(sekreAvgNum).toFixed(1) : '—';
+        const sekreHasData = sekreDinilai > 0 || !!sekreFallback;
+        const sekreBadgeCls = !sekreHasData ? 'mnv-badge-pending' : parseFloat(sekreAvg) >= 35 ? 'mnv-badge-good' : parseFloat(sekreAvg) >= 25 ? 'mnv-badge-mid' : 'mnv-badge-bad';
 
         rows += `
         <tr class="mnv-sekre-accordion-header" onclick="mnvToggleSekre()" style="cursor:pointer;background:#eff6ff;border-top:2px solid #bfdbfe;">
@@ -231,25 +237,31 @@
                 </div>
             </td>
             <td style="font-size:12px;color:#3b82f6;">
-                ${sekreDinilai > 0 ? `<span style="font-size:11px;color:#64748b;">${sekreDinilai}/${SEKRE_UNITS.length} sub-bagian dinilai</span>` : '<span style="font-size:12px;color:#94a3b8;font-style:italic;">Belum ada penilaian</span>'}
+                ${sekreDinilai > 0
+                    ? `<span style="font-size:11px;color:#64748b;">${sekreDinilai}/${SEKRE_UNITS.length} sub-bagian dinilai</span>`
+                    : sekreFallback
+                        ? `<span style="font-size:11px;color:#f59e0b;"></span>`
+                        : '<span style="font-size:12px;color:#94a3b8;font-style:italic;">Belum ada penilaian</span>'}
             </td>
             <td>
-                ${sekreDinilai > 0 ? `<strong style="font-size:20px;color:#1e40af;">${sekreAvg}</strong><span style="font-size:11px;color:#94a3b8;">/40</span>` : '<span style="color:#94a3b8;">—</span>'}
+                ${sekreHasData ? `<strong style="font-size:20px;color:#1e40af;">${sekreAvg}</strong><span style="font-size:11px;color:#94a3b8;">/40</span>` : '<span style="color:#94a3b8;">—</span>'}
             </td>
-            <td><span class="${sekreBadgeCls}">${sekreDinilai > 0 ? 'Rata-rata' : 'Pending'}</span></td>
+            <td><span class="${sekreBadgeCls}">${sekreHasData ? 'Rata-rata' : 'Pending'}</span></td>
             <td colspan="3" style="color:#3b82f6;font-size:12px;font-weight:600;">
                 ${sekreExpanded ? '▲ Sembunyikan sub-bagian' : '▼ Lihat sub-bagian'}
             </td>
         </tr>`;
 
-        SEKRE_UNITS.forEach(unit => { rows += renderUnitRow(unit, bulan, monthData, true); });
+        SEKRE_UNITS.forEach(unit => { rows += renderUnitRow(unit, bulan, monthData, true, sekreFallback); });
 
-        if (sekreDinilai > 0) {
+        if (sekreHasData) {
+            const subtotalLabel = sekreDinilai > 0
+                ? `∑ Rata-rata Sekretariat (${sekreDinilai}/${SEKRE_UNITS.length} dinilai) <span style="font-size:11px;background:#bfdbfe;color:#1e40af;padding:2px 8px;border-radius:10px;margin-left:6px;">Tersimpan di SEKRETARIAT_DATA</span>`
+                : `∑ Rata-rata Sekretariat <span style="font-size:11px;background:#fef9c3;color:#a16207;padding:2px 8px;border-radius:10px;margin-left:6px;"></span>`;
             rows += `
             <tr id="mnv-sekre-subtotal-row" class="mnv-sekre-sub-row" style="display:none;background:#dbeafe;border-bottom:2px solid #93c5fd;">
                 <td colspan="2" style="padding:8px 14px 8px 44px;font-size:12px;font-weight:700;color:#1e3a8a;">
-                    ∑ Rata-rata Sekretariat (${sekreDinilai}/${SEKRE_UNITS.length} dinilai)
-                    <span style="font-size:11px;background:#bfdbfe;color:#1e40af;padding:2px 8px;border-radius:10px;margin-left:6px;">Tersimpan di sheet SEKRETARIAT_DATA</span>
+                    ${subtotalLabel}
                 </td>
                 <td style="font-size:18px;font-weight:800;color:#1e3a8a;">${sekreAvg}</td>
                 <td colspan="4"></td>
@@ -264,8 +276,13 @@
         }
     };
 
-    function renderUnitRow(unit, bulan, monthData, isSekre) {
-        const u = monthData[unit];
+    function renderUnitRow(unit, bulan, monthData, isSekre, sekreFallback) {
+        // Kalau sub-bagian tidak punya data individual, gunakan fallback rata-rata sheet bulan
+        let u = monthData[unit];
+        const usingFallback = !u && isSekre && sekreFallback;
+        if (usingFallback) {
+            u = sekreFallback; // tampilkan nilai rata-rata sebagai representasi
+        }
         const subRowClass = isSekre ? 'mnv-sekre-sub-row' : '';
         const subRowStyle = isSekre ? 'display:none;' : '';
         const labelPad = isSekre ? 'padding-left:44px;' : '';
@@ -864,8 +881,11 @@
         const nonSekreRows = buildRekapRows(NON_SEKRE_UNITS, monthData, false, bulan);
         const sekreVals = SEKRE_UNITS.map(u => monthData[u]).filter(Boolean);
         const sekreDinilai = sekreVals.length;
-        const sekreAvg = sekreDinilai > 0 ? (sekreVals.reduce((a,u)=>a+(u.total||0),0)/sekreDinilai).toFixed(1) : '—';
-        const sekreRows = buildRekapRows(SEKRE_UNITS, monthData, true, bulan);
+        const sekreFallback = monthData['Sekretariat'];
+        const sekreAvgRekap = sekreDinilai > 0
+            ? (sekreVals.reduce((a,u)=>a+(u.total||0),0)/sekreDinilai).toFixed(1)
+            : sekreFallback ? sekreFallback.total.toFixed(1) : '—';
+        const sekreRows = buildRekapRows(SEKRE_UNITS, monthData, true, bulan, sekreFallback);
 
         let sekreSubTotal = '';
         if (sekreDinilai > 0) {
@@ -946,8 +966,12 @@
         if (hdr) hdr.textContent = sekreRekapExpanded ? '▲ Sembunyikan' : '▼ Klik untuk detail';
     };
 
-    function buildRekapRows(units, monthData, isSekre, bulan) {
-        const v = (u, f) => (monthData[u]?.[f]) || 0;
+    function buildRekapRows(units, monthData, isSekre, bulan, sekreFallback) {
+        const v = (u, f) => {
+            if (monthData[u]) return monthData[u][f] || 0;
+            if (isSekre && sekreFallback) return sekreFallback[f] || 0; // fallback rata-rata
+            return 0;
+        };
         const subClass = isSekre ? 'mnv-rekap-sekre-sub' : '';
         const subStyle = isSekre ? 'display:none;' : '';
         return units.map(unit => {
