@@ -25,6 +25,8 @@
     };
 
     let chartTepat = null, chartTotal = null;
+    let SPJ_REKAP_CACHE = {};
+    let SPJ_CACHE_TIME = {};
 
     // ── Local Storage ─────────────────────────────────────────
     function getLocalData() {
@@ -422,6 +424,8 @@
         if (!data[bulan]) data[bulan] = {};
         data[bulan][unit] = { totalPengajuan, nominalTepat, hariTerlambat, nilaiTepat, sanksi, totalNilai, catatan };
         setLocalData(data);
+        delete SPJ_REKAP_CACHE[bulan];
+        delete SPJ_CACHE_TIME[bulan];
 
         const u = (window.AUTH && window.AUTH.getUser) ? window.AUTH.getUser() || {} : {};
         try {
@@ -442,74 +446,345 @@
     };
 
     window.spjDeleteEntry = function (unit, bulan) {
+
         showConfirmModal({
             icon: '🗑️',
             title: 'Hapus Penilaian SPJ?',
-            message: `Unit: <strong>${unit}</strong><br>Bulan: <strong>${bulan}</strong><br><br><span style="color:#ef4444;font-weight:600;">Tindakan ini tidak dapat dibatalkan.</span>`,
+            message: `
+                Unit: <strong>${unit}</strong><br>
+                Bulan: <strong>${bulan}</strong><br><br>
+                <span style="color:#ef4444;font-weight:600;">
+                    Tindakan ini tidak dapat dibatalkan.
+                </span>
+            `,
             confirmText: 'Ya, Hapus',
             confirmClass: 'btn-danger',
-        }, () => {
-            const data = getLocalData();
-            if (data[bulan]) delete data[bulan][unit];
-            setLocalData(data);
-            spjRenderInputTable();
-            if (window.showToast) showToast('Data berhasil dihapus', 'success');
+
+        }, async () => {
+
+            try {
+
+                // =========================
+                // HAPUS DARI GOOGLE SHEET
+                // =========================
+                const res = await callAPI({
+                    action: 'deleteSPJKeuangan',
+                    bulan: bulan,
+                    unit: unit
+                });
+
+                if (!res || !res.success) {
+                    throw new Error(
+                        res?.message || 'Gagal menghapus data'
+                    );
+                }
+
+                // =========================
+                // HAPUS LOCAL STORAGE
+                // =========================
+                const data = getLocalData();
+
+                if (data[bulan]) {
+                    delete data[bulan][unit];
+                }
+
+                setLocalData(data);
+
+                // =========================
+                // CLEAR CACHE
+                // =========================
+                delete SPJ_REKAP_CACHE[bulan];
+                delete SPJ_CACHE_TIME[bulan];
+
+                // =========================
+                // REFRESH UI
+                // =========================
+                await spjRenderInputTable();
+
+                const selectedBulan =
+                    document.getElementById(
+                        'spj-select-bulan-rekap'
+                    )?.value;
+
+                if (
+                    selectedBulan &&
+                    selectedBulan === bulan
+                ) {
+                    await renderRekap();
+                }
+
+                if (window.showToast) {
+                    showToast(
+                        'Data berhasil dihapus',
+                        'success'
+                    );
+                }
+
+            } catch (err) {
+
+                console.error(err);
+
+                if (window.showToast) {
+                    showToast(
+                        err.message ||
+                        'Gagal menghapus data',
+                        'error'
+                    );
+                }
+            }
         });
     };
-
     // ── Tab 2: Rekapitulasi ───────────────────────────────────
-    function renderRekap() {
-        const bulan = document.getElementById('spj-select-bulan-rekap').value;
-        const data  = getLocalData();
-        let targetData = {};
-        if (bulan) {
-            targetData[bulan] = data[bulan] || {};
-        } else {
-            const latestMonth = MONTHS.slice().reverse().find(m => data[m] && Object.keys(data[m]).length > 0);
-            if (latestMonth) targetData[latestMonth] = data[latestMonth];
-        }
-        const currentBulan = bulan || Object.keys(targetData)[0] || '';
-        const monthData    = targetData[currentBulan] || {};
-        const tbody        = document.getElementById('spj-rekap-tbody');
+    async function renderRekap() {
+
+        const bulan = document.getElementById(
+            'spj-select-bulan-rekap'
+        ).value;
+
+        const tbody = document.getElementById(
+            'spj-rekap-tbody'
+        );
+
         if (!tbody) return;
-        const nilaiTepat   = UNITS.map(u => (monthData[u]?.nilaiTepat ?? 0).toFixed(2));
-        const nilaiTerlambat = UNITS.map(u => (monthData[u]?.sanksi ?? 0).toFixed(2));
-        const totalNilai   = UNITS.map(u => (monthData[u]?.totalNilai ?? 0).toFixed(2));
+
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8"
+                    style="text-align:center;padding:40px;">
+                    Memuat data...
+                </td>
+            </tr>
+        `;
+
+        let monthData = {};
+
+        // cache 5 menit
+        const CACHE_DURATION = 5 * 60 * 1000;
+
+        const now = Date.now();
+
+        if (
+            SPJ_REKAP_CACHE[bulan] &&
+            SPJ_CACHE_TIME[bulan] &&
+            (now - SPJ_CACHE_TIME[bulan]) < CACHE_DURATION
+        ) {
+
+            monthData = SPJ_REKAP_CACHE[bulan];
+
+        } else {
+
+            try {
+
+                const res = await callAPI({
+                    action: 'getMonthlySheetData',
+                    bulan: bulan
+                });
+
+                if (
+                    res &&
+                    res.success &&
+                    res.data
+                ) {
+
+                    monthData = res.data;
+
+                    // save cache
+                    SPJ_REKAP_CACHE[bulan] = res.data;
+                    SPJ_CACHE_TIME[bulan] = now;
+                }
+
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        try {
+
+            const res = await callAPI({
+                action: 'getMonthlySheetData',
+                bulan: bulan
+            });
+
+            if (
+                res &&
+                res.success &&
+                res.data
+            ) {
+                monthData = res.data;
+            }
+
+        } catch (err) {
+            console.error(err);
+        }
+
+        const nilaiTepat = UNITS.map(u =>
+            parseFloat(
+                monthData[u]?.nilaiTepat || 0
+            )
+        );
+
+        const nilaiTerlambat = UNITS.map(u =>
+            parseFloat(
+                monthData[u]?.sanksi || 0
+            )
+        );
+
+        const totalNilai = UNITS.map(u =>
+            parseFloat(
+                monthData[u]?.totalNilai || 0
+            )
+        );
+
         tbody.innerHTML = `
         <tr>
-            <td style="text-align:center;vertical-align:middle;">1</td>
-            <td style="font-weight:500;vertical-align:middle;">SPJ yang masuk tepat waktu</td>
-            ${nilaiTepat.map(v => `<td class="${parseFloat(v) < 35 ? 'rekap-bad' : 'rekap-good'}" style="text-align:center;vertical-align:middle;">${v}</td>`).join('')}
-        </tr>
-        <tr>
-            <td style="text-align:center;vertical-align:middle;">2</td>
-            <td style="font-weight:500;vertical-align:middle;">SPJ yang terlambat (sanksi)</td>
-            ${nilaiTerlambat.map(v => `<td style="text-align:center;vertical-align:middle;color:${parseFloat(v) > 0 ? '#ef4444' : '#64748b'};">${parseFloat(v) > 0 ? '−' : ''}${v}</td>`).join('')}
-        </tr>
-        <tr style="background:#f0f7ff;">
-            <td style="vertical-align:middle;"></td>
-            <td style="font-weight:700;vertical-align:middle;">TOTAL NILAI</td>
-            ${totalNilai.map(v => `<td style="text-align:center;vertical-align:middle;font-weight:700;color:${parseFloat(v) >= 30 ? '#065f46' : parseFloat(v) >= 20 ? '#1e40af' : '#991b1b'};">${v}</td>`).join('')}
-        </tr>`;
+            <td style="text-align:center;">1</td>
+            <td style="font-weight:500;">
+                SPJ yang masuk tepat waktu
+            </td>
 
+            ${nilaiTepat.map(v => `
+                <td style="text-align:center;">
+                    ${v.toFixed(2)}
+                </td>
+            `).join('')}
+        </tr>
+
+        <tr>
+            <td style="text-align:center;">2</td>
+            <td style="font-weight:500;">
+                SPJ yang terlambat (sanksi)
+            </td>
+
+            ${nilaiTerlambat.map(v => `
+                <td style="
+                    text-align:center;
+                    color:${v > 0 ? '#ef4444' : '#64748b'};
+                ">
+                    ${v > 0 ? '-' : ''}
+                    ${v.toFixed(2)}
+                </td>
+            `).join('')}
+        </tr>
+
+        <tr style="background:#f8fafc;">
+            <td></td>
+
+            <td style="font-weight:700;">
+                TOTAL NILAI
+            </td>
+
+            ${totalNilai.map(v => `
+                <td style="
+                    text-align:center;
+                    font-weight:700;
+                ">
+                    ${v.toFixed(2)}
+                </td>
+            `).join('')}
+        </tr>
+        `;
+
+        // destroy chart lama
         if (chartTepat) chartTepat.destroy();
         if (chartTotal) chartTotal.destroy();
-        const shortUnits = ['BLUT', 'Kewirausahaan', 'Koperasi', 'UKM', 'Usaha Mikro', 'Sekretariat'];
-        const ctContainer = document.getElementById('spj-chartTepat');
+
+        const shortUnits = [
+            'BLUT',
+            'Kewirausahaan',
+            'Koperasi',
+            'UKM',
+            'Usaha Mikro',
+            'Sekretariat'
+        ];
+
+        // chart tepat waktu
+        const ctContainer =
+            document.getElementById('spj-chartTepat');
+
         if (ctContainer) {
-            chartTepat = new Chart(ctContainer.getContext('2d'), {
-                type: 'bar',
-                data: { labels: shortUnits, datasets: [{ label: 'Nilai Tepat Waktu', data: nilaiTepat.map(Number), backgroundColor: nilaiTepat.map(v => parseFloat(v) >= 35 ? '#10b981' : parseFloat(v) >= 20 ? '#f59e0b' : '#ef4444'), borderRadius: 6 }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 35, ticks: { stepSize: 5 } } } }
-            });
+
+            chartTepat = new Chart(
+                ctContainer.getContext('2d'),
+                {
+                    type: 'bar',
+
+                    data: {
+                        labels: shortUnits,
+
+                        datasets: [{
+                            label: 'Nilai Tepat Waktu',
+                            data: nilaiTepat,
+                            borderRadius: 6
+                        }]
+                    },
+
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 35,
+                                ticks: {
+                                    stepSize: 5
+                                }
+                            }
+                        }
+                    }
+                }
+            );
         }
-        const cTotalContainer = document.getElementById('spj-chartTotal');
-        if (cTotalContainer) {
-            chartTotal = new Chart(cTotalContainer.getContext('2d'), {
-                type: 'bar',
-                data: { labels: shortUnits, datasets: [{ label: 'Total Nilai', data: totalNilai.map(Number), backgroundColor: totalNilai.map(v => parseFloat(v) >= 30 ? '#10b981' : parseFloat(v) >= 20 ? '#f59e0b' : '#ef4444'), borderRadius: 6 }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `Nilai: ${ctx.parsed.y.toFixed(2)} / 35` } } }, scales: { y: { beginAtZero: true, max: 35, ticks: { stepSize: 5 } } } }
-            });
+
+        // chart total
+        const totalContainer =
+            document.getElementById('spj-chartTotal');
+
+        if (totalContainer) {
+
+            chartTotal = new Chart(
+                totalContainer.getContext('2d'),
+                {
+                    type: 'bar',
+
+                    data: {
+                        labels: shortUnits,
+
+                        datasets: [{
+                            label: 'Total Nilai',
+                            data: totalNilai,
+                            borderRadius: 6
+                        }]
+                    },
+
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 35,
+                                ticks: {
+                                    stepSize: 5
+                                }
+                            }
+                        }
+                    }
+                }
+            );
         }
     }
     window.spjRenderRekap = renderRekap;
