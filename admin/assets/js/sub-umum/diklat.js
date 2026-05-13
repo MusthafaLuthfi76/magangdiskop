@@ -3,11 +3,7 @@
 // Admin Panel — Dinas Koperasi UKM
 //
 // PERUBAHAN v2.2:
-//  1. Lock triwulan HANYA berbasis periode bulan (TIDAK sequential):
-//     Jan–Mar  → hanya Triwulan 1 terbuka
-//     Apr–Jun  → Triwulan 1 & 2 terbuka
-//     Jul–Sep  → Triwulan 1, 2 & 3 terbuka
-//     Okt–Des  → semua 4 triwulan terbuka
+//  1. Semua triwulan selalu terbuka di halaman ini
 //  2. Redesign tampilan: lebih profesional, modern, menarik
 // ============================================================
 (function () {
@@ -79,19 +75,14 @@
         { nama: 'Hana Budi Setyowati, S.T.', unit: 'Balai Layanan Usaha Terpadu KUMKM' },
     ];
 
-    // ── Hitung triwulan yang boleh diupload berdasarkan bulan sekarang ──
+    // ── Triwulan selalu terbuka ────────────────────────────────
     function getMaxAllowedTriwulan() {
-        const month = new Date().getMonth() + 1;
-        if (month <= 3)  return 1;
-        if (month <= 6)  return 2;
-        if (month <= 9)  return 3;
         return 4;
     }
 
-    // ── [v2.2] Cek triwulan HANYA berbasis periode bulan (TIDAK sequential) ──
+    // ── Semua triwulan boleh dipakai ───────────────────────────
     function isTriwulanAllowed(idx) {
-        const maxIdx = getMaxAllowedTriwulan() - 1;
-        return idx <= maxIdx;
+        return idx >= 0 && idx < QUARTERS.length;
     }
 
     function getTriwulanLockReason(idx) {
@@ -1123,9 +1114,6 @@
                 <span style="color:#64748b;">${SVG.calendar}</span>
                 <span style="font-size:12.5px;font-weight:600;color:#475569;">${monthName}</span>
             </div>
-            <div style="padding:8px 14px;background:linear-gradient(135deg,#1e40af,#1d4ed8);border-radius:10px;">
-                <span style="font-size:12.5px;font-weight:700;color:#fff;">Periode Aktif: ${twNames[maxTw]}</span>
-            </div>
         </div>
     </div>
 
@@ -1153,15 +1141,6 @@
         </div>
     </div>
 
-
-
-    <!-- ── Info banner ── -->
-    <div style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border:1px solid #bae6fd;border-radius:12px;padding:12px 16px;margin-bottom:20px;font-size:12.5px;color:#0369a1;display:flex;gap:10px;align-items:flex-start;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <span>Upload dibuka sesuai <strong>periode aktif</strong> berdasarkan bulan berjalan.
-        Jan–Mar → Tw I &nbsp;·&nbsp; Apr–Jun → Tw I &amp; II &nbsp;·&nbsp; Jul–Sep → Tw I–III &nbsp;·&nbsp; Okt–Des → Semua.
-        Klik ikon <strong>pensil</strong> untuk upload bukti diklat.</span>
-    </div>
 
     <!-- ── Table card ── -->
     <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
