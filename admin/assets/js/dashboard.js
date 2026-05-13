@@ -75,7 +75,7 @@
                 apiGet(API_OP, { action: 'getVehicleScores', jenis: 'KUNCI' }),
                 apiGet(API_OP, { action: 'getVehicleScores', jenis: 'BERSIH' }),
                 apiGet(API_OP, { action: 'getBBMScores' }),
-                apiGet(API_OP, { action: 'getDocuments' }),
+                apiGet(API_OP, { action: 'getRekapArsip' }),
                 apiGet(API_SPJ, { action: 'getAllMonthlySheetData' }),
                 apiGet(API_SPJ, { action: 'getAllSPJKeuangan' }),
                 apiGet(API_MONEV, { action: 'getAllSheetData' }),
@@ -206,33 +206,51 @@
                 if (s.bulan === bulan && sc[s.unit]) sc[s.unit].bbm = s.skorAkhir;
             });
         }
-        var docsArray = [];
-        if (docsR.status === 'fulfilled') {
-            var dv = docsR.value;
-            if (Array.isArray(dv)) docsArray = dv;
-            else if (Array.isArray(dv && dv.data)) docsArray = dv.data;
-        }
-        if (docsArray.length > 0) {
-            var dm = {};
-            docsArray.forEach(function (d) {
-                if (!d.nilai || d.nilai === '' || d.nilai === '-' || !d.unit) return;
-                var nilaiNum = parseFloat(String(d.nilai).replace(',', '.'));
-                if (isNaN(nilaiNum) || nilaiNum <= 0) return;
-                if (normalizeBulan(d.bulan) !== bulan) return;
-                var unitRaw = String(d.unit).trim();
-                var matchedUnit = UNITS.find(function (u) { return u.trim() === unitRaw; })
-                    || UNITS.find(function (u) { return u.trim().toLowerCase() === unitRaw.toLowerCase(); })
-                    || UNITS.find(function (u) { return unitRaw.toLowerCase().includes(u.trim().toLowerCase()) || u.trim().toLowerCase().includes(unitRaw.toLowerCase()); });
-                if (!matchedUnit) return;
-                if (!dm[matchedUnit]) dm[matchedUnit] = [];
-                dm[matchedUnit].push(nilaiNum);
+        // ─────────────────────────────────────
+        // KEARSIPAN
+        // SOURCE: REKAPITULASI DOKUMEN ARSIP
+        // ─────────────────────────────────────
+        if (
+            docsR.status === 'fulfilled' &&
+            docsR.value &&
+            docsR.value.success &&
+            docsR.value.rekap
+        ) {
+
+            var rekap = docsR.value.rekap;
+
+            var bulanData = Object.keys(rekap).find(function(k){
+                return normalizeBulan(k) === bulan;
             });
-            UNITS.forEach(function (u) {
-                if (dm[u] && dm[u].length > 0) {
-                    var avg = dm[u].reduce(function (a, c) { return a + c; }, 0) / dm[u].length;
-                    sc[u].kearsipan = +Math.min(5, avg).toFixed(2);
-                }
-            });
+
+            if (bulanData) {
+
+                var unitData = rekap[bulanData];
+
+                UNITS.forEach(function (u) {
+
+                    var foundKey = Object.keys(unitData).find(function(k){
+                        return k.trim().toLowerCase() === u.trim().toLowerCase();
+                    });
+
+                    if (
+                        foundKey &&
+                        unitData[foundKey] &&
+                        unitData[foundKey].skorAkhir !== undefined
+                    ) {
+
+                        var nilai = parseFloat(
+                            unitData[foundKey].skorAkhir
+                        );
+
+                        if (!isNaN(nilai)) {
+
+                            sc[u].kearsipan =
+                                +nilai.toFixed(2);
+                        }
+                    }
+                });
+            }
         }
     }
 
