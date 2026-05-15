@@ -36,6 +36,14 @@
         'september': 'SEPTEMBER', 'oktober': 'OKTOBER', 'november': 'NOVEMBER', 'desember': 'DESEMBER'
     };
 
+    // Konfigurasi Triwulan
+    var TRIWULAN = {
+        'TW I': ['JANUARI', 'FEBRUARI', 'MARET'],
+        'TW II': ['APRIL', 'MEI', 'JUNI'],
+        'TW III': ['JULI', 'AGUSTUS', 'SEPTEMBER'],
+        'TW IV': ['OKTOBER', 'NOVEMBER', 'DESEMBER']
+    };
+
     // ── State ────────────────────────────────────────────────────
     var S = { bulan: '', scores: {}, allMonth: {}, loading: false };
     var MONEV_CACHE = null;
@@ -43,6 +51,10 @@
     var C = {};
     var activeCat = 'bbm';
     var spjDataSource = 'none';
+
+    // State Triwulan
+    var chartTwDB = null;
+    var twSelectedDB = 'TW I';
 
     // ── Helpers ──────────────────────────────────────────────────
     function fn(v) {
@@ -57,6 +69,26 @@
         if (!str) return '';
         var first = String(str).trim().toLowerCase().split(/[\s,\/\-]+/)[0];
         return MONTH_MAP[first] || String(str).trim().toUpperCase().split(/[\s,\/\-]+/)[0];
+    }
+
+    // Hitung total dari satu bulan per unit
+    function getUnitMonthTotal(unit, m) {
+        var sc = S.allMonth[m] ? S.allMonth[m][unit] : null;
+        if (!sc) return null;
+        var t = 0, h = false;
+        MODS.forEach(function (mo) {
+            if (sc[mo.key] !== null && sc[mo.key] !== undefined) {
+                t += sc[mo.key];
+                h = true;
+            }
+        });
+        return h ? t : null;
+    }
+
+    // Hitung rata-rata total di satu Triwulan
+    function getUnitTwTotal(unit, twMonths) {
+        var vals = twMonths.map(function (m) { return getUnitMonthTotal(unit, m); }).filter(function (v) { return v !== null; });
+        return vals.length ? +(vals.reduce(function (a, b) { return a + b; }, 0) / vals.length).toFixed(2) : null;
     }
 
     // ── Load All Data ────────────────────────────────────────────
@@ -206,30 +238,21 @@
                 if (s.bulan === bulan && sc[s.unit]) sc[s.unit].bbm = s.skorAkhir;
             });
         }
-        // ─────────────────────────────────────
-        // KEARSIPAN
-        // SOURCE: REKAPITULASI DOKUMEN ARSIP
-        // ─────────────────────────────────────
         if (
             docsR.status === 'fulfilled' &&
             docsR.value &&
             docsR.value.success &&
             docsR.value.rekap
         ) {
-
             var rekap = docsR.value.rekap;
-
-            var bulanData = Object.keys(rekap).find(function(k){
+            var bulanData = Object.keys(rekap).find(function (k) {
                 return normalizeBulan(k) === bulan;
             });
 
             if (bulanData) {
-
                 var unitData = rekap[bulanData];
-
                 UNITS.forEach(function (u) {
-
-                    var foundKey = Object.keys(unitData).find(function(k){
+                    var foundKey = Object.keys(unitData).find(function (k) {
                         return k.trim().toLowerCase() === u.trim().toLowerCase();
                     });
 
@@ -238,15 +261,9 @@
                         unitData[foundKey] &&
                         unitData[foundKey].skorAkhir !== undefined
                     ) {
-
-                        var nilai = parseFloat(
-                            unitData[foundKey].skorAkhir
-                        );
-
+                        var nilai = parseFloat(unitData[foundKey].skorAkhir);
                         if (!isNaN(nilai)) {
-
-                            sc[u].kearsipan =
-                                +nilai.toFixed(2);
+                            sc[u].kearsipan = +nilai.toFixed(2);
                         }
                     }
                 });
@@ -321,44 +338,67 @@
             } catch (e) { }
         });
     }
+
     function dbSyncToPPOCache() {
         try {
             var bulan = S.bulan;
             if (!bulan || !S.scores) return;
- 
+
             var PPO_CACHE_KEY = 'penilaian_orang_team_cache_v1';
             var MODS_KEYS = ['bbm', 'kendaraan', 'ruang', 'kearsipan', 'spj', 'monev'];
- 
+
             var scores = {};
-            Object.keys(S.scores).forEach(function(unit) {
+            Object.keys(S.scores).forEach(function (unit) {
                 var d = S.scores[unit];
                 if (!d) return;
- 
+
                 var total = 0, hasAny = false, entry = {};
-                MODS_KEYS.forEach(function(k) {
+                MODS_KEYS.forEach(function (k) {
                     var raw = d[k];
                     var v = (raw !== null && raw !== undefined) ? parseFloat(raw) : null;
                     var val = (!isNaN(v) && v !== null) ? +v.toFixed(2) : 0;
                     entry[k] = val;
                     if (!isNaN(v) && v !== null) { total += val; hasAny = true; }
                 });
- 
+
                 if (hasAny) {
                     entry.total = +total.toFixed(2);
                     scores[unit] = entry;
                 }
             });
- 
+
             if (!Object.keys(scores).length) return;
- 
+
             var existing = {};
-            try { existing = JSON.parse(localStorage.getItem(PPO_CACHE_KEY) || '{}'); } catch(e) {}
+            try { existing = JSON.parse(localStorage.getItem(PPO_CACHE_KEY) || '{}'); } catch (e) { }
             existing[bulan] = { scores: scores, timestamp: Date.now() };
             localStorage.setItem(PPO_CACHE_KEY, JSON.stringify(existing));
- 
-            console.log('[Dashboard→PPO] Cache synced:', bulan, '—', Object.keys(scores).length, 'unit');
-        } catch(e) {
+        } catch (e) {
             console.warn('[Dashboard→PPO] Sync gagal:', e);
+        }
+    }
+
+    // ── Inject Triwulan HTML ───────────────────────────────────────
+    function ensureTriwulanPanel() {
+        // Tambah Panel Triwulan di HTML jika belum ada
+        var pTotal = document.getElementById('db-pTotal');
+        if (pTotal && pTotal.parentNode && !document.getElementById('db-pTriwulan')) {
+            var div = document.createElement('div');
+            div.id = 'db-pTriwulan';
+            div.style.display = 'none';
+            div.innerHTML = '<div id="db-tw-content"></div>';
+            pTotal.parentNode.appendChild(div);
+        }
+
+        // Tambah tombol Tab Triwulan jika belum ada
+        var pProfilBtn = document.querySelector('#section-dashboard .chart-tab[onclick*="profil"]');
+        var pTriwulanBtn = document.querySelector('#section-dashboard .chart-tab[onclick*="triwulan"]');
+        if (pProfilBtn && pProfilBtn.parentNode && !pTriwulanBtn) {
+            var btn = document.createElement('button');
+            btn.className = 'chart-tab';
+            btn.setAttribute('onclick', "dbGoTab('triwulan', this)");
+            btn.textContent = 'Rekap Triwulan';
+            pProfilBtn.parentNode.appendChild(btn);
         }
     }
 
@@ -366,7 +406,7 @@
     function render() {
         renderStats();
         renderTable();
-        renderMobileCards(); // ← fix mobile
+        renderMobileCards();
         renderPanel();
         dbSyncToPPOCache();
     }
@@ -504,31 +544,39 @@
 
     // ── Charts ─────────────────────────────────────────────────────
     function renderPanel() {
-        var panels = ['db-pTotal', 'db-pTrend', 'db-pCat', 'db-pProfil'];
+        ensureTriwulanPanel(); // Pastikan panel DOM Triwulan disuntikkan
+        var panels = ['db-pTotal', 'db-pTrend', 'db-pCat', 'db-pProfil', 'db-pTriwulan'];
         var active = panels.find(function (id) {
             var el = document.getElementById(id);
             return el && el.hasAttribute('data-active');
         }) || 'db-pTotal';
+
         if (active === 'db-pTotal') drawTotal();
         else if (active === 'db-pTrend') drawTrend();
         else if (active === 'db-pCat') drawCat();
         else if (active === 'db-pProfil') drawProfil();
+        else if (active === 'db-pTriwulan') drawTriwulan();
     }
 
     window.dbGoTab = function (name, btn) {
+        ensureTriwulanPanel(); // Pastikan struktur siap sebelum navigasi
         document.querySelectorAll('#section-dashboard .chart-tab').forEach(function (b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-        var map = { total: 'db-pTotal', trend: 'db-pTrend', cat: 'db-pCat', profil: 'db-pProfil' };
-        ['db-pTotal', 'db-pTrend', 'db-pCat', 'db-pProfil'].forEach(function (id) {
+        if (btn) btn.classList.add('active');
+        var map = { total: 'db-pTotal', trend: 'db-pTrend', cat: 'db-pCat', profil: 'db-pProfil', triwulan: 'db-pTriwulan' };
+
+        ['db-pTotal', 'db-pTrend', 'db-pCat', 'db-pProfil', 'db-pTriwulan'].forEach(function (id) {
             var el = document.getElementById(id);
             if (el) { el.style.display = 'none'; el.removeAttribute('data-active'); }
         });
+
         var el = document.getElementById(map[name]);
         if (el) { el.style.display = ''; el.setAttribute('data-active', '1'); }
+
         if (name === 'total') drawTotal();
         else if (name === 'trend') drawTrend();
         else if (name === 'cat') drawCat();
         else if (name === 'profil') drawProfil();
+        else if (name === 'triwulan') drawTriwulan();
     };
 
     function drawTotal() {
@@ -840,6 +888,141 @@
                 }
             });
         });
+    }
+
+    // ── Rekap Triwulan ────────────────────────────────────────────────
+    window.dbRenderTriwulan = function () {
+        var sel = document.getElementById('db-tw-select');
+        if (sel) twSelectedDB = sel.value;
+        drawTriwulan();
+    };
+
+    function drawTriwulan() {
+        var container = document.getElementById('db-tw-content');
+        if (!container) return;
+
+        var twKeys = Object.keys(TRIWULAN);
+        var twColors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899'];
+        var twBgs = ['#eff6ff', '#f0fdf4', '#fffbeb', '#fdf2f8'];
+
+        var grid = UNITS.map(function (u) {
+            var twData = twKeys.map(function (tw) { return getUnitTwTotal(u, TRIWULAN[tw]); });
+            var allVals = twData.filter(function (v) { return v !== null; });
+            return {
+                unit: u,
+                twData: twData,
+                best: allVals.length ? Math.max.apply(null, allVals) : null,
+                worst: allVals.length ? Math.min.apply(null, allVals) : null,
+                annual: allVals.length ? +(allVals.reduce(function (a, b) { return a + b; }, 0) / allVals.length).toFixed(2) : null
+            };
+        });
+
+        var tableGrid = grid.slice().sort(function (a, b) { return (b.annual || 0) - (a.annual || 0); });
+
+        var twSummaries = twKeys.map(function (tw, twIdx) {
+            var vals = grid.map(function (r) { return { unit: r.unit, val: r.twData[twIdx] }; }).filter(function (r) { return r.val !== null; });
+            vals.sort(function (a, b) { return b.val - a.val; });
+            var avg = vals.length ? (vals.reduce(function (a, r) { return a + r.val; }, 0) / vals.length).toFixed(2) : '—';
+            return { tw: tw, highest: vals[0] || null, lowest: vals[vals.length - 1] || null, avg: avg, count: vals.length };
+        });
+
+        var summaryCards = twSummaries.map(function (s, i) {
+            return '<div style="background:' + twBgs[i] + ';border:1px solid ' + twColors[i] + '40;border-radius:12px;padding:16px;">' +
+                '<div style="font-size:12px;font-weight:700;color:' + twColors[i] + ';margin-bottom:8px;">' + s.tw + ' (' + TRIWULAN[s.tw][0].slice(0, 3) + '-' + TRIWULAN[s.tw][2].slice(0, 3) + ')</div>' +
+                '<div style="display:flex;flex-direction:column;gap:8px;">' +
+                '<div style="background:#fff;padding:8px 10px;border-radius:8px;border:1px solid #e5e7eb;">' +
+                '<div style="font-size:10px;color:#64748b;font-weight:600;margin-bottom:2px;">🏆 TERTINGGI</div>' +
+                (s.highest ? '<div style="font-size:12px;font-weight:700;color:#065f46;">' + US[s.highest.unit] + '</div><div style="font-size:18px;font-weight:800;color:' + twColors[i] + '">' + s.highest.val.toFixed(1) + '<span style="font-size:11px;color:#94a3b8;font-weight:600;">/100</span></div>' : '<div style="font-size:12px;color:#94a3b8;">Belum ada data</div>') +
+                '</div>' +
+                '<div style="background:#fff;padding:8px 10px;border-radius:8px;border:1px solid #e5e7eb;">' +
+                '<div style="font-size:10px;color:#64748b;font-weight:600;margin-bottom:2px;">📉 TERENDAH</div>' +
+                (s.lowest && s.lowest.val !== (s.highest ? s.highest.val : null) ? '<div style="font-size:12px;font-weight:700;color:#991b1b;">' + US[s.lowest.unit] + '</div><div style="font-size:18px;font-weight:800;color:#ef4444;">' + s.lowest.val.toFixed(1) + '<span style="font-size:11px;color:#94a3b8;font-weight:600;">/100</span></div>' : '<div style="font-size:12px;color:#94a3b8;">Belum ada data</div>') +
+                '</div>' +
+                '<div style="text-align:center;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid #e5e7eb;">' +
+                '<div style="font-size:10px;color:#64748b;margin-bottom:2px;">Rata-rata Keseluruhan</div>' +
+                '<div style="font-size:16px;font-weight:700;color:' + twColors[i] + '">' + s.avg + '</div>' +
+                '</div>' +
+                '</div>' +
+                '</div>';
+        }).join('');
+
+        var ths = twKeys.map(function (tw, i) { return '<th style="text-align:center;background:' + twBgs[i] + ';color:' + twColors[i] + '">' + tw + '</th>'; }).join('');
+        var trs = tableGrid.map(function (row, i) {
+            var tds = row.twData.map(function (val) {
+                if (val === null) return '<td style="text-align:center;color:#94a3b8;">—</td>';
+                var isBest = val === row.best && row.best !== null;
+                var isWorst = val === row.worst && row.worst !== null && row.best !== row.worst;
+                var col = val >= 80 ? '#10b981' : val >= 60 ? '#3b82f6' : val >= 40 ? '#f59e0b' : '#ef4444';
+                var bgs = isBest ? '<br><span style="display:inline-block;margin-top:2px;font-size:9px;background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:4px;">BEST</span>' : (isWorst ? '<br><span style="display:inline-block;margin-top:2px;font-size:9px;background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:4px;">LOW</span>' : '');
+                return '<td style="text-align:center;font-weight:600;color:' + col + ';vertical-align:middle;">' + val.toFixed(1) + bgs + '</td>';
+            }).join('');
+            var annCol = row.annual >= 80 ? '#10b981' : row.annual >= 60 ? '#3b82f6' : row.annual >= 40 ? '#f59e0b' : '#ef4444';
+            return '<tr>' +
+                '<td><span class="rank-badge">' + (i + 1) + '</span></td>' +
+                '<td style="font-weight:600;min-width:140px;vertical-align:middle;">' + US[row.unit] + '</td>' +
+                tds +
+                '<td style="text-align:center;font-weight:800;font-size:15px;color:' + annCol + ';vertical-align:middle;">' + (row.annual !== null ? row.annual.toFixed(1) : '—') + '</td>' +
+                '</tr>';
+        }).join('');
+
+        var chartSkorData = UNITS.map(function (u) { return getUnitTwTotal(u, TRIWULAN[twSelectedDB]); });
+
+        container.innerHTML =
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px;">' + summaryCards + '</div>' +
+
+            '<div class="card" style="margin-bottom:20px;">' +
+            '<div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">' +
+            '<h3 class="card-title">📊 Rata-rata Nilai Per Divisi</h3>' +
+            '<div style="display:flex;align-items:center;gap:8px;">' +
+            '<label style="font-size:12.5px;color:#64748b;font-weight:600;">Pilih Triwulan:</label>' +
+            '<select class="select-input" id="db-tw-select" onchange="dbRenderTriwulan()" style="min-width:120px;padding:6px 10px;font-size:12.5px;border-radius:6px;cursor:pointer;">' +
+            twKeys.map(function (tw) { return '<option value="' + tw + '"' + (tw === twSelectedDB ? ' selected' : '') + '>' + tw + ' (' + TRIWULAN[tw][0].slice(0, 3) + '-' + TRIWULAN[tw][2].slice(0, 3) + ')</option>' }).join('') +
+            '</select>' +
+            '</div>' +
+            '</div>' +
+            '<div class="card-content" style="padding:20px;">' +
+            '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px;">Nilai Rata-rata Divisi — ' + twSelectedDB + '</div>' +
+            '<div style="position:relative;height:300px;width:100%;"><canvas id="db-cTriwulan"></canvas></div>' +
+            '</div>' +
+            '</div>' +
+
+            '<div class="card">' +
+            '<div class="card-header"><h3 class="card-title">📋 Rekapitulasi Triwulanan Lintas Modul</h3></div>' +
+            '<div class="table-container" style="overflow-x:auto;">' +
+            '<table id="db-main-table" style="width:100%;border-collapse:collapse;font-size:13px;">' +
+            '<thead><tr>' +
+            '<th style="width:40px;">#</th>' +
+            '<th style="text-align:left;">Divisi / Unit</th>' +
+            ths +
+            '<th style="text-align:center;background:#1e293b;color:white;">Rata Tahunan</th>' +
+            '</tr></thead>' +
+            '<tbody>' + trs + '</tbody>' +
+            '</table>' +
+            '</div>' +
+            '</div>';
+
+        setTimeout(function () {
+            if (chartTwDB) { chartTwDB.destroy(); chartTwDB = null; }
+            var ctx = document.getElementById('db-cTriwulan');
+            if (!ctx || typeof Chart === 'undefined') return;
+            chartTwDB = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: UNITS.map(function (u) { return US[u]; }),
+                    datasets: [{
+                        label: 'Nilai ' + twSelectedDB,
+                        data: chartSkorData,
+                        borderRadius: 6,
+                        backgroundColor: chartSkorData.map(function (v) { return v >= 80 ? '#10b981' : v >= 60 ? '#3b82f6' : v >= 40 ? '#f59e0b' : '#ef4444'; })
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return c.parsed.y.toFixed(1) + ' / 100'; } } } },
+                    scales: { y: { beginAtZero: true, max: 100, ticks: { stepSize: 20 }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 11 } } } }
+                }
+            });
+        }, 50);
     }
 
     function buildCatRow() {

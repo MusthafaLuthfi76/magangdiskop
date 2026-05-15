@@ -3,7 +3,7 @@
 // Admin Panel — Dinas Koperasi UKM
 // UPDATE:
 //   - Tab Rekapitulasi: ambil dari sheet REKAPITULASI DOKUMEN ARSIP
-//     via action=getRekapArsip, tampilkan 0 (bukan —) jika kosong
+//   - Tab Rekap Triwulanan (baru)
 //   - Submit assessment: tulis indikator per komponen ke rekap
 //   - Dashboard: expose krsGetRekapKearsipan pakai getRekapArsip
 // ============================================================
@@ -13,10 +13,19 @@
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxNQCq-3r2xBQvug2uzlgGzUSm9FGNnXgoZjJKLzmZpw-BltRPUoCP8gFw8Ke2SV1Z8Eg/exec';
     const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
     const MONTHS_UPPER = ['JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI', 'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'];
+
     const UNITS = [
         'Sekretariat', 'Bidang Koperasi', 'Bidang UKM',
         'Bidang Usaha Mikro', 'Bidang Kewirausahaan', 'Balai Layanan Usaha Terpadu KUMKM'
     ];
+    const UNITS_SHORT = ['Sekretariat', 'Koperasi', 'UKM', 'Usaha Mikro', 'Kewirausahaan', 'BLUT'];
+
+    const TRIWULAN = {
+        'TW I': ['JANUARI', 'FEBRUARI', 'MARET'],
+        'TW II': ['APRIL', 'MEI', 'JUNI'],
+        'TW III': ['JULI', 'AGUSTUS', 'SEPTEMBER'],
+        'TW IV': ['OKTOBER', 'NOVEMBER', 'DESEMBER']
+    };
 
     let masterDocuments = [], allDocuments = [];
     let documentsCurrentPage = 1;
@@ -26,6 +35,10 @@
     // Rekap state — diisi dari sheet REKAPITULASI DOKUMEN ARSIP
     let rekapData = {};
     let rekapChart = null;
+
+    // State Chart Triwulan
+    let chartTwKrsIndikator = null;
+    let chartTwKrsSanksi = null;
 
     // ── SVG Icons ─────────────────────────────────────────────
     const ICONS = {
@@ -127,12 +140,14 @@
         const el = document.getElementById('krs-tab-' + tabName);
         if (el) el.classList.add('active');
         if (tabName === 'rekap') loadRekap();
+        else if (tabName === 'triwulan') krsRenderTriwulan();
     };
     window.krsSwitchTabDD = function (v) {
         document.querySelectorAll('#section-kearsipan .krs-tab-content').forEach(tc => tc.classList.remove('active'));
         const el = document.getElementById('krs-tab-' + v);
         if (el) el.classList.add('active');
         if (v === 'rekap') loadRekap();
+        else if (v === 'triwulan') krsRenderTriwulan();
     };
 
     // ══════════════════════════════════════════════════════════
@@ -241,13 +256,13 @@
                 <td>${catatanDisplay}</td>
                 <td><div class="action-buttons"><div class="btn-icon-group">
                     ${isPending
-                        ? `${hasFiles ? `<button onclick="krsViewFiles('${doc.id}')" class="btn-icon btn-icon-file" title="Lihat File Lampiran">${ICONS.link}</button>` : ''}
+                    ? `${hasFiles ? `<button onclick="krsViewFiles('${doc.id}')" class="btn-icon btn-icon-file" title="Lihat File Lampiran">${ICONS.link}</button>` : ''}
                            <button onclick="krsOpenAssess('${doc.id}')" class="btn-icon btn-icon-approve" title="Nilai Dokumen">${ICONS.plus}</button>
                            <button onclick="krsConfirmDelete('${doc.id}',this)" class="btn-icon btn-icon-delete" title="Hapus Dokumen">${ICONS.trash}</button>`
-                        : `<button onclick="krsViewAssess('${doc.id}')" class="btn-icon btn-icon-view" title="Lihat Detail">${ICONS.eye}</button>
+                    : `<button onclick="krsViewAssess('${doc.id}')" class="btn-icon btn-icon-view" title="Lihat Detail">${ICONS.eye}</button>
                            <button onclick="krsEditAssess('${doc.id}')" class="btn-icon btn-icon-edit" title="Edit Penilaian">${ICONS.edit}</button>
                            <button onclick="krsConfirmDelete('${doc.id}',this)" class="btn-icon btn-icon-delete" title="Hapus Dokumen">${ICONS.trash}</button>`
-                    }
+                }
                 </div></div></td>
             </tr>`;
         }).join('');
@@ -272,13 +287,13 @@
                     <div>${isPending ? `<span style="font-size:12px;color:#94a3b8;">Belum dinilai</span>` : `<div class="krs-card-nilai" style="color:${scoreColor};">${doc.nilai}</div><div class="krs-card-nilai-label">dari 5.0</div>`}</div>
                     <div class="btn-icon-group" style="margin:0;">
                         ${isPending
-                            ? `${hasFiles ? `<button onclick="krsViewFiles('${doc.id}')" class="btn-icon btn-icon-file">${ICONS.link}</button>` : ''}
+                    ? `${hasFiles ? `<button onclick="krsViewFiles('${doc.id}')" class="btn-icon btn-icon-file">${ICONS.link}</button>` : ''}
                                <button onclick="krsOpenAssess('${doc.id}')" class="btn-icon btn-icon-approve">${ICONS.plus}</button>
                                <button onclick="krsConfirmDelete('${doc.id}',this)" class="btn-icon btn-icon-delete">${ICONS.trash}</button>`
-                            : `<button onclick="krsViewAssess('${doc.id}')" class="btn-icon btn-icon-view">${ICONS.eye}</button>
+                    : `<button onclick="krsViewAssess('${doc.id}')" class="btn-icon btn-icon-view">${ICONS.eye}</button>
                                <button onclick="krsEditAssess('${doc.id}')" class="btn-icon btn-icon-edit">${ICONS.edit}</button>
                                <button onclick="krsConfirmDelete('${doc.id}',this)" class="btn-icon btn-icon-delete">${ICONS.trash}</button>`
-                        }
+                }
                     </div>
                 </div>
             </div>`;
@@ -298,60 +313,57 @@
     };
 
     // ══════════════════════════════════════════════════════════
-    // TAB REKAPITULASI
-    // Ambil langsung dari sheet REKAPITULASI DOKUMEN ARSIP
-    // via action=getRekapArsip
+    // DATA FETCHING: REKAPITULASI DOKUMEN ARSIP
     // ══════════════════════════════════════════════════════════
-    async function loadRekap() {
-        const bulan = document.getElementById('krs-rekap-bulan-filter')?.value || '';
-        const container = document.getElementById('krs-rekap-container');
-        if (!container) return;
-
-        container.innerHTML = `<div style="text-align:center;padding:40px;"><div class="spinner"></div><div style="margin-top:12px;color:#94a3b8;">Memuat rekapitulasi dari sheet...</div></div>`;
-
+    async function _fetchRekapIfNeeded(force = false) {
+        if (!force && Object.keys(rekapData).length > 0) return;
         try {
             const result = await jsonpFetch(APPS_SCRIPT_URL, { action: 'getRekapArsip' });
-
             if (result && result.success && result.rekap) {
-                // Format nested: { BULAN: { unit: { skorAkhir, ... } } }
                 rekapData = result.rekap;
             } else if (result && result.success && result.scores && Array.isArray(result.scores)) {
-                // Format lama: array of { bulan, unit, skorAkhir, ... }
-                // Konversi ke nested
                 rekapData = {};
                 result.scores.forEach(s => {
                     const b = (s.bulan || '').toUpperCase().trim();
                     if (!b) return;
                     if (!rekapData[b]) rekapData[b] = {};
                     rekapData[b][s.unit] = {
-                        skorUtuh:         s.skorUtuh || 5,
+                        skorUtuh: s.skorUtuh || 5,
                         jumlahBuktiSalah: s.jumlahBuktiSalah || 0,
-                        jumlahSuratTND:   s.jumlahSuratTND   || 0,
-                        jumlahSanksi:     s.jumlahSanksi     || 0,
-                        skorAkhir:        s.skorAkhir        || 0,
+                        jumlahSuratTND: s.jumlahSuratTND || 0,
+                        jumlahSanksi: s.jumlahSanksi || 0,
+                        skorAkhir: s.skorAkhir || 0,
                     };
                 });
             } else {
-                // Fallback ke hitung dari masterDocuments
                 rekapData = buildRekapFromDocuments(masterDocuments);
             }
-
-            renderRekap(bulan);
         } catch (error) {
-            console.error('[Kearsipan] loadRekap error:', error);
+            console.error('[Kearsipan] fetchRekap error:', error);
             rekapData = buildRekapFromDocuments(masterDocuments);
-            renderRekap(bulan);
         }
     }
-    window.krsLoadRekap = loadRekap;
+
+    // ══════════════════════════════════════════════════════════
+    // TAB REKAPITULASI BULANAN
+    // ══════════════════════════════════════════════════════════
+    async function loadRekap(force = false) {
+        const bulan = document.getElementById('krs-rekap-bulan-filter')?.value || '';
+        const container = document.getElementById('krs-rekap-container');
+        if (!container) return;
+
+        container.innerHTML = `<div style="text-align:center;padding:40px;"><div class="spinner"></div><div style="margin-top:12px;color:#94a3b8;">Memuat rekapitulasi dari sheet...</div></div>`;
+
+        await _fetchRekapIfNeeded(force);
+        renderRekap(bulan);
+    }
+    window.krsLoadRekap = () => loadRekap(true);
 
     /**
      * Fallback: hitung rekap dari dokumen lokal jika API gagal.
-     * Nilainya 0 jika tidak ada data, bukan null — agar chart tetap tampil.
      */
     function buildRekapFromDocuments(docs) {
         const rekap = {};
-        // Inisialisasi semua bulan & unit dengan 0
         MONTHS_UPPER.forEach(bulan => {
             rekap[bulan] = {};
             UNITS.forEach(unit => {
@@ -380,14 +392,14 @@
             const r = rekap[bulanUpper][matchedUnit];
             r.count++;
 
-            const buktiLengkap    = toBool(doc.bukti_lengkap);
-            const buktiBenar      = toBool(doc.bukti_benar);
+            const buktiLengkap = toBool(doc.bukti_lengkap);
+            const buktiBenar = toBool(doc.bukti_benar);
             const buktiTepatWaktu = toBool(doc.bukti_tepat_waktu);
-            const hariTerlambat   = parseInt(doc.hari_terlambat) || 0;
+            const hariTerlambat = parseInt(doc.hari_terlambat) || 0;
 
             let buktiSalah = 0;
-            if (!buktiLengkap)    buktiSalah += 1;
-            if (!buktiBenar)      buktiSalah += 1;
+            if (!buktiLengkap) buktiSalah += 1;
+            if (!buktiBenar) buktiSalah += 1;
             if (!buktiTepatWaktu) buktiSalah += Math.max(1, hariTerlambat);
             r.jumlahBuktiSalah += buktiSalah;
 
@@ -401,9 +413,9 @@
             Object.keys(rekap[bulan]).forEach(unit => {
                 const r = rekap[bulan][unit];
                 const sanksi = (r.jumlahBuktiSalah * 0.1)
-                             + (Math.floor(r.jumlahSuratTND / 3) * 0.1);
+                    + (Math.floor(r.jumlahSuratTND / 3) * 0.1);
                 r.jumlahSanksi = Math.round(sanksi * 10) / 10;
-                r.skorAkhir    = Math.max(0, Math.round((r.skorUtuh - r.jumlahSanksi) * 10) / 10);
+                r.skorAkhir = Math.max(0, Math.round((r.skorUtuh - r.jumlahSanksi) * 10) / 10);
             });
         });
 
@@ -421,11 +433,8 @@
         }
 
         const bulanUpper = bulanFilter.toUpperCase();
-        // Gunakan data dari sheet (bisa semua 0 kalau bulan belum ada dokumen)
-        // Pastikan semua unit muncul, default 0
         const bulanData = rekapData[bulanUpper] || {};
 
-        // Build rows — SELALU tampilkan semua unit, nilai 0 jika tidak ada data
         const rows = UNITS.map(unit => {
             const d = bulanData[unit] || {
                 skorUtuh: 5, jumlahBuktiSalah: 0,
@@ -434,17 +443,14 @@
             return { unit, data: d };
         });
 
-        // Render chart
         setTimeout(() => renderRekapChart(rows, bulanFilter), 50);
 
-        // Render table — tampilkan 0 bukan '—' untuk nilai kosong
         const tableRows = rows.map((r, i) => {
-            const skor = r.data.skorAkhir; // bisa 0
+            const skor = r.data.skorAkhir;
             const pct = (skor / 5) * 100;
             const chipCls = pct >= 90 ? 'krs-rekap-great'
                 : pct >= 70 ? 'krs-rekap-good'
-                : pct >= 50 ? 'krs-rekap-fair' : 'krs-rekap-poor';
-            // Bahkan skor 0 tetap merah
+                    : pct >= 50 ? 'krs-rekap-fair' : 'krs-rekap-poor';
             const progColor = pct >= 90 ? '#10b981' : pct >= 70 ? '#3b82f6' : pct >= 50 ? '#f59e0b' : '#ef4444';
             return `<tr>
                 <td><span style="width:22px;height:22px;border-radius:50%;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;">${i + 1}</span></td>
@@ -501,7 +507,6 @@
 
     function renderRekapAllMonths() {
         const container = document.getElementById('krs-rekap-container');
-        // Filter bulan yang ada di rekapData (sudah di-load dari sheet)
         const bulanList = MONTHS_UPPER.filter(b => rekapData[b] && Object.keys(rekapData[b]).length > 0);
 
         if (bulanList.length === 0) {
@@ -514,7 +519,6 @@
 
         const cards = bulanList.map(bulan => {
             const bData = rekapData[bulan] || {};
-            // Hitung rata-rata dari semua unit (termasuk yang 0)
             const allScores = UNITS.map(u => (bData[u] || {}).skorAkhir || 0);
             const avg = (allScores.reduce((a, c) => a + c, 0) / allScores.length).toFixed(2);
             const bulanLabel = MONTHS_ID[MONTHS_UPPER.indexOf(bulan)] || bulan;
@@ -543,11 +547,9 @@
         if (rekapChart) { rekapChart.destroy(); rekapChart = null; }
 
         const labels = rows.map(r => r.unit.length > 20 ? r.unit.slice(0, 18) + '…' : r.unit);
-        // Tampilkan 0 jika tidak ada data (bukan null), sehingga bar tetap muncul dengan tinggi 0
         const dataVals = rows.map(r => r.data ? (r.data.skorAkhir || 0) : 0);
         const colors = dataVals.map(v => {
             const pct = (v / 5) * 100;
-            // Nilai 0 = merah
             return pct >= 90 ? '#10b981bb' : pct >= 70 ? '#3b82f6bb' : pct >= 50 ? '#f59e0bbb' : '#ef4444bb';
         });
         const borderColors = dataVals.map(v => {
@@ -589,6 +591,208 @@
     }
 
     // ══════════════════════════════════════════════════════════
+    // TAB REKAP TRIWULAN (BARU)
+    // ══════════════════════════════════════════════════════════
+
+    function _calcKrsTWUnitScore(unit, months) {
+        const vals = months
+            .map(m => rekapData[m] && rekapData[m][unit] ? rekapData[m][unit].skorAkhir : null)
+            .filter(v => v !== null && v !== undefined);
+        return vals.length ? parseFloat((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2)) : null;
+    }
+
+    function _calcKrsTWUnitSanksi(unit, months) {
+        const vals = months
+            .map(m => rekapData[m] && rekapData[m][unit] ? rekapData[m][unit].jumlahSanksi : null)
+            .filter(v => v !== null && v !== undefined);
+        return vals.length ? parseFloat((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2)) : null;
+    }
+
+    async function krsRenderTriwulan() {
+        const container = document.getElementById('krs-triwulan-content');
+        if (!container) return;
+
+        // Tampilkan loading ringan jika data rekap belum di-fetch
+        if (Object.keys(rekapData).length === 0) {
+            container.innerHTML = `<div style="text-align:center;padding:60px;color:#94a3b8;"><div class="spinner"></div><div style="margin-top:12px;">Memuat data triwulanan...</div></div>`;
+            await _fetchRekapIfNeeded();
+        }
+
+        _krsRenderTriwulanUI(container);
+    }
+    window.krsRenderTriwulan = krsRenderTriwulan;
+    window.krsRefreshTriwulan = async () => {
+        rekapData = {}; // Clear memory for fresh fetch
+        await krsRenderTriwulan();
+    };
+
+    function _krsRenderTriwulanUI(container) {
+        const twKeys = Object.keys(TRIWULAN);
+        const twColors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899'];
+        const twBgs = ['#eff6ff', '#f0fdf4', '#fffbeb', '#fdf2f8'];
+
+        const twSelectEl = document.getElementById('krs-tw-select');
+        const twSelected = twSelectEl?.value || 'TW I';
+        const twSelectedMonths = TRIWULAN[twSelected];
+
+        // Build grid: per unit, nilai rata-rata tiap TW
+        const grid = UNITS.map(unit => {
+            const twData = twKeys.map(tw => _calcKrsTWUnitScore(unit, TRIWULAN[tw]));
+            const allVals = twData.filter(v => v !== null);
+            return { unit, twData, best: allVals.length ? Math.max(...allVals) : null, worst: allVals.length ? Math.min(...allVals) : null };
+        });
+
+        // Summary cards per TW
+        const twSummaries = twKeys.map((tw, twIdx) => {
+            const vals = grid.map(r => ({ unit: r.unit, val: r.twData[twIdx] })).filter(r => r.val !== null);
+            vals.sort((a, b) => b.val - a.val);
+            const avg = vals.length ? (vals.reduce((a, r) => a + r.val, 0) / vals.length).toFixed(2) : '—';
+            return { tw, highest: vals[0] || null, lowest: vals[vals.length - 1] || null, avg, assessed: vals.length };
+        });
+
+        // Chart data untuk TW terpilih
+        const chartSkorData = UNITS.map(u => _calcKrsTWUnitScore(u, twSelectedMonths) || 0);
+        const chartViolData = UNITS.map(u => _calcKrsTWUnitSanksi(u, twSelectedMonths) || 0);
+
+        // Summary cards HTML
+        const summaryCards = twSummaries.map((s, i) => `
+        <div style="background:${twBgs[i]};border:1.5px solid ${twColors[i]}33;border-radius:12px;padding:16px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${twColors[i]};margin-bottom:6px;">${s.tw}</div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:10px;">${TRIWULAN[s.tw][0].slice(0, 3)} – ${TRIWULAN[s.tw][2].slice(0, 3)}</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+                <div style="background:white;border-radius:8px;padding:8px 10px;border:1px solid #e5e7eb;">
+                    <div style="font-size:10px;color:#64748b;font-weight:600;margin-bottom:2px;">🏆 TERTINGGI</div>
+                    ${s.highest
+                ? `<div style="font-size:12px;font-weight:700;color:#065f46;">${s.highest.unit.replace('Balai Layanan Usaha Terpadu KUMKM', 'BLUT').replace('Bidang ', '')}</div>
+                           <div style="font-size:18px;font-weight:800;color:${twColors[i]};">${s.highest.val}<span style="font-size:11px;color:#94a3b8;">/5</span></div>`
+                : '<div style="color:#94a3b8;font-size:12px;">Belum ada data</div>'}
+                </div>
+                <div style="background:white;border-radius:8px;padding:8px 10px;border:1px solid #e5e7eb;">
+                    <div style="font-size:10px;color:#64748b;font-weight:600;margin-bottom:2px;">📉 TERENDAH</div>
+                    ${s.lowest && s.lowest !== s.highest
+                ? `<div style="font-size:12px;font-weight:700;color:#991b1b;">${s.lowest.unit.replace('Balai Layanan Usaha Terpadu KUMKM', 'BLUT').replace('Bidang ', '')}</div>
+                           <div style="font-size:18px;font-weight:800;color:#ef4444;">${s.lowest.val}<span style="font-size:11px;color:#94a3b8;">/5</span></div>`
+                : '<div style="color:#94a3b8;font-size:12px;">Belum ada data</div>'}
+                </div>
+                <div style="text-align:center;padding:6px;background:white;border-radius:8px;border:1px solid #e5e7eb;">
+                    <div style="font-size:10px;color:#64748b;margin-bottom:2px;">Rata-rata</div>
+                    <div style="font-size:16px;font-weight:700;color:${twColors[i]};">${s.avg}</div>
+                    <div style="font-size:10px;color:#94a3b8;">${s.assessed} unit dinilai</div>
+                </div>
+            </div>
+        </div>`).join('');
+
+        // Tabel detail
+        const twHeaderCells = twKeys.map((tw, i) => `<th style="text-align:center;background:${twBgs[i]};color:${twColors[i]};">${tw}<br><small style="opacity:.7;font-size:10px;">${TRIWULAN[tw][0].slice(0, 3)}-${TRIWULAN[tw][2].slice(0, 3)}</small></th>`).join('');
+        const tableRows = grid.map(row => {
+            const shortUnit = row.unit.replace('Balai Layanan Usaha Terpadu KUMKM', 'BLUT').replace('Bidang ', '');
+            const twCells = row.twData.map((val, i) => {
+                if (val === null) return `<td style="text-align:center;color:#94a3b8;font-size:12px;">—</td>`;
+                const isBest = val === row.best && row.best !== null;
+                const isWorst = val === row.worst && row.worst !== null && row.best !== row.worst;
+                const color = val >= 4.5 ? '#065f46' : val >= 3 ? '#92400e' : '#991b1b';
+                return `<td style="text-align:center;">
+                    <div style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;">
+                        <span style="font-weight:700;color:${color};font-size:15px;">${val}</span>
+                        ${isBest ? '<span style="font-size:9px;background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:6px;font-weight:600;">BEST</span>' : ''}
+                        ${isWorst ? '<span style="font-size:9px;background:#fee2e2;color:#991b1b;padding:1px 5px;border-radius:6px;font-weight:600;">LOW</span>' : ''}
+                    </div>
+                </td>`;
+            }).join('');
+            const filledVals = row.twData.filter(v => v !== null);
+            const annualAvg = filledVals.length ? (filledVals.reduce((a, b) => a + b, 0) / filledVals.length).toFixed(2) : '—';
+            const annualColor = parseFloat(annualAvg) >= 4.5 ? '#065f46' : parseFloat(annualAvg) >= 3 ? '#92400e' : '#991b1b';
+            return `<tr>
+                <td style="font-weight:600;font-size:13px;">${shortUnit}</td>
+                ${twCells}
+                <td style="text-align:center;"><strong style="font-size:15px;color:${annualColor};">${annualAvg}</strong></td>
+            </tr>`;
+        }).join('');
+
+        container.innerHTML = `
+        <!-- Summary cards -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px;">
+            ${summaryCards}
+        </div>
+
+        <!-- Chart section -->
+        <div class="card" style="margin-bottom:20px;">
+            <div class="card-header">
+                <h3 class="card-title">📊 Chart Kearsipan per Triwulan</h3>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <label style="font-size:13px;color:#64748b;font-weight:600;">Pilih Triwulan:</label>
+                    <select class="select-input" id="krs-tw-select" onchange="krsRenderTriwulan()" style="min-width:120px;">
+                        ${twKeys.map(tw => `<option value="${tw}" ${tw === twSelected ? 'selected' : ''}>${tw} (${TRIWULAN[tw][0].slice(0, 3)}–${TRIWULAN[tw][2].slice(0, 3)})</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+            <div class="card-content">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px;">Skor Akhir Per Unit — ${twSelected}</div>
+                        <div class="chart-container"><canvas id="krs-tw-scoreChart"></canvas></div>
+                    </div>
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px;">Rata-rata Pengurangan/Sanksi — ${twSelected}</div>
+                        <div class="chart-container"><canvas id="krs-tw-sanksiChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detail table -->
+        <div class="card" style="margin-bottom:0;">
+            <div class="card-header">
+                <h3 class="card-title">📋 Rekap Nilai Kearsipan Per Triwulan — Semua Unit</h3>
+                <span style="font-size:12px;color:#64748b;">Rata-rata skor akhir dari bulan yang sudah diisi</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;padding:10px 12px;background:#f8fafc;font-size:12px;color:#64748b;font-weight:700;min-width:140px;">Unit / Bidang</th>
+                            ${twHeaderCells}
+                            <th style="text-align:center;background:#1a2942;color:white;font-size:12px;padding:10px 12px;">Rata-rata<br>Tahunan</th>
+                        </tr>
+                    </thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+            </div>
+            <div style="padding:12px 16px;border-top:1px solid #f1f5f9;font-size:12px;color:#64748b;display:flex;gap:16px;flex-wrap:wrap;">
+                <span>🏆 <strong>BEST</strong> = skor terbaik unit dalam 4 TW</span>
+                <span>📉 <strong>LOW</strong> = skor terendah unit</span>
+                <span>≥4.5 = <span style="color:#065f46;font-weight:600;">Sangat Baik</span> · ≥3 = <span style="color:#92400e;font-weight:600;">Cukup</span> · &lt;3 = <span style="color:#991b1b;font-weight:600;">Kurang</span></span>
+            </div>
+        </div>`;
+
+        // Render chart setelah DOM tersedia
+        setTimeout(() => {
+            if (chartTwKrsIndikator) { chartTwKrsIndikator.destroy(); chartTwKrsIndikator = null; }
+            if (chartTwKrsSanksi) { chartTwKrsSanksi.destroy(); chartTwKrsSanksi = null; }
+            const ctx1 = document.getElementById('krs-tw-scoreChart');
+            const ctx2 = document.getElementById('krs-tw-sanksiChart');
+            if (!ctx1 || !ctx2 || typeof Chart === 'undefined') return;
+
+            chartTwKrsIndikator = new Chart(ctx1.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: UNITS_SHORT,
+                    datasets: [{ label: 'Skor Akhir', data: chartSkorData, borderRadius: 6, backgroundColor: chartSkorData.map(v => v >= 4.5 ? '#10b981' : v >= 3 ? '#f59e0b' : v > 0 ? '#ef4444' : '#e2e8f0') }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `Skor: ${ctx.parsed.y.toFixed(2)}/5` } } }, scales: { y: { beginAtZero: true, max: 5, ticks: { stepSize: 0.5 }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } }
+            });
+            chartTwKrsSanksi = new Chart(ctx2.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: UNITS_SHORT,
+                    datasets: [{ label: 'Rata-rata Sanksi', data: chartViolData, borderRadius: 6, backgroundColor: '#f43f5e' }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `Rata-rata Sanksi: -${ctx.parsed.y.toFixed(2)}` } } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 0.5 }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } }
+            });
+        }, 80);
+    }
+
+    // ══════════════════════════════════════════════════════════
     // PUBLIC: getRekapKearsipan untuk Dashboard
     // Ambil dari sheet REKAPITULASI DOKUMEN ARSIP via getRekapArsip
     // ══════════════════════════════════════════════════════════
@@ -609,7 +813,7 @@
             }
 
             const bulanUpper = bulan.toUpperCase();
-            const bulanData  = data[bulanUpper] || {};
+            const bulanData = data[bulanUpper] || {};
             const scores = {};
             UNITS.forEach(u => {
                 // Kembalikan 0 (bukan null) jika tidak ada data
@@ -1001,14 +1205,14 @@
         const modal = document.getElementById('krs-assessModal');
         if (!modal) return;
 
-        const buktiLengkap      = modal.querySelector('#krs-bukti-lengkap').checked;
-        const buktiBenar        = modal.querySelector('#krs-bukti-benar').checked;
-        const buktiTepatWaktu   = modal.querySelector('#krs-bukti-tepat-waktu').checked;
-        const hariTerlambat     = parseInt(modal.querySelector('#krs-hari-terlambat').value) || 0;
-        const sudahSrikandi     = modal.querySelector('#krs-sudah-srikandi').checked;
-        const suratSesuaiTND    = modal.querySelector('#krs-surat-sesuai-tnd').checked;
-        const jumlahSuratSalah  = suratSesuaiTND ? 0 : (parseInt(modal.querySelector('#krs-jumlah-surat-salah').value) || 0);
-        const catatan           = modal.querySelector('textarea[name="krs-catatan"]').value;
+        const buktiLengkap = modal.querySelector('#krs-bukti-lengkap').checked;
+        const buktiBenar = modal.querySelector('#krs-bukti-benar').checked;
+        const buktiTepatWaktu = modal.querySelector('#krs-bukti-tepat-waktu').checked;
+        const hariTerlambat = parseInt(modal.querySelector('#krs-hari-terlambat').value) || 0;
+        const sudahSrikandi = modal.querySelector('#krs-sudah-srikandi').checked;
+        const suratSesuaiTND = modal.querySelector('#krs-surat-sesuai-tnd').checked;
+        const jumlahSuratSalah = suratSesuaiTND ? 0 : (parseInt(modal.querySelector('#krs-jumlah-surat-salah').value) || 0);
+        const catatan = modal.querySelector('textarea[name="krs-catatan"]').value;
         const user = (window.AUTH && window.AUTH.getUser) ? window.AUTH.getUser() : {};
 
         const btn = document.getElementById('krs-submit-assess-btn');
@@ -1017,19 +1221,16 @@
         btn.innerHTML = '<span class="spinner spinner-sm"></span> Menyimpan...';
 
         try {
-            // Kirim semua data mentah ke GAS
-            // GAS yang menghitung jumlah_bukti_salah, jumlah_surat_tidak_sesuai_tnd,
-            // dan menulis ke sheet REKAPITULASI DOKUMEN ARSIP via arsipRecalcScores
             const result = await jsonpFetch(APPS_SCRIPT_URL, {
                 action: isEdit ? 'updateDocumentAssessment' : 'createDocumentAssessment',
-                doc_id:               docId,
-                bukti_lengkap:        buktiLengkap,
-                bukti_benar:          buktiBenar,
-                bukti_tepat_waktu:    buktiTepatWaktu,
-                hari_terlambat:       hariTerlambat,
-                sudah_srikandi:       sudahSrikandi,
-                surat_sesuai_tnd:     suratSesuaiTND,
-                jumlah_surat_salah:   jumlahSuratSalah,
+                doc_id: docId,
+                bukti_lengkap: buktiLengkap,
+                bukti_benar: buktiBenar,
+                bukti_tepat_waktu: buktiTepatWaktu,
+                hari_terlambat: hariTerlambat,
+                sudah_srikandi: sudahSrikandi,
+                surat_sesuai_tnd: suratSesuaiTND,
+                jumlah_surat_salah: jumlahSuratSalah,
                 catatan,
                 penilai_nama: user.name || 'Admin',
             });
@@ -1200,12 +1401,14 @@
 
     <div class="tabs">
         <button class="tab krs-tab active" onclick="krsSwitchTab('dokumen',event)">📄 Dokumen</button>
-        <button class="tab krs-tab" onclick="krsSwitchTab('rekap',event)">📊 Rekapitulasi Nilai</button>
+        <button class="tab krs-tab" onclick="krsSwitchTab('rekap',event)">📊 Rekap Bulanan</button>
+        <button class="tab krs-tab" onclick="krsSwitchTab('triwulan',event)">📅 Rekap Triwulan</button>
     </div>
     <div class="tabs-dropdown">
         <select onchange="krsSwitchTabDD(this.value)">
             <option value="dokumen">📄 Dokumen</option>
-            <option value="rekap">📊 Rekapitulasi Nilai</option>
+            <option value="rekap">📊 Rekap Bulanan</option>
+            <option value="triwulan">📅 Rekap Triwulan</option>
         </select>
     </div>
 
@@ -1289,6 +1492,25 @@
             </div>
         </div>
     </div>
+    
+    <div id="krs-tab-triwulan" class="krs-tab-content">
+        <div class="card" style="margin-bottom:16px;">
+            <div class="card-header">
+                <h2 class="card-title">📅 Rekap Nilai Kearsipan Triwulanan</h2>
+                <button onclick="krsRefreshTriwulan()" class="btn btn-sm">${ICONS.refresh} Refresh</button>
+            </div>
+            <div class="card-content">
+                <div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:6px;padding:10px 14px;font-size:13px;color:#1e3a8a;">
+                    📌 <strong>Kriteria:</strong> TW I = Jan–Mar · TW II = Apr–Jun · TW III = Jul–Sep · TW IV = Okt–Des.
+                    Nilai triwulan = rata-rata skor akhir bulan yang sudah dinilai dari sheet Rekapitulasi.
+                </div>
+            </div>
+        </div>
+        <div id="krs-triwulan-content">
+            <div style="text-align:center;padding:60px;color:#94a3b8;"><div class="spinner"></div><div style="margin-top:12px;">Memuat rekap triwulan...</div></div>
+        </div>
+    </div>
+
 </div>`;
 
         currentUser = (window.AUTH && window.AUTH.getUser) ? window.AUTH.getUser() || {} : {};

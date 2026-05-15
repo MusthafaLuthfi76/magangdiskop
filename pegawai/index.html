@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="assets/css/select2-custom-styles.css">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 
     <style>
@@ -274,8 +274,7 @@
     <div class="hero">
         <div class="hero-content">
             <div class="hero-logo">
-                <img src="./migunani logo.jpg.png"
-                    alt="Logo Pemda DIY">
+                <img src="./migunani logo.jpg.png" alt="Logo Pemda DIY">
             </div>
             <h1>Migunani</h1>
             <p>Manajemen Internal Guna Meningkatkan Kinerja Organisasi <br>Dinas Koperasi dan UKM DIY</p>
@@ -306,6 +305,7 @@
                     <option value="transparansi-dokumen">&nbsp;&nbsp;Dokumen Arsip</option>
                     <option value="transparansi-spj">&nbsp;&nbsp;Nilai SPJ Keuangan</option>
                     <option value="transparansi-monev">&nbsp;&nbsp;Nilai Monev</option>
+                    <option value="transparansi-triwulan">&nbsp;&nbsp;Rekap Triwulan</option>
                     <option value="" disabled>───────────</option>
                     <option value="status-kendaraan">Jadwal Mobil</option>
                     <option value="status-ruangan">Jadwal Ruang Rapat</option>
@@ -342,6 +342,8 @@
                             onclick="handleTransparansiClick('spj-keuangan'); return false;">Penilaian SPJ Keuangan</a>
                         <a href="javascript:void(0);"
                             onclick="handleTransparansiClick('monev'); return false;">Penilaian Monev</a>
+                        <a href="javascript:void(0);" onclick="handleTransparansiClick('triwulan'); return false;">Rekap
+                            Triwulan</a>
                     </div>
                 </div>
 
