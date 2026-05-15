@@ -1,6 +1,7 @@
 // ============================================================
 // voucher-bbm.js — Voucher BBM section (SPA)
 // Admin Panel — Dinas Koperasi UKM
+// REVISI: + Tab Rekap Triwulanan + Filter tanpa loading (cache lokal)
 // ============================================================
 (function () {
     'use strict';
@@ -15,7 +16,12 @@
 
     let masterRequests = [], allRequests = [];
     let masterViolations = [], allViolations = [];
-    let allScores = {}, scoreChart = null, violationChart = null;
+    // allScores sekarang menyimpan semua bulan agar triwulan bisa dihitung
+    let allScoresCache = {};   // key: bulan → data
+    let allScoresFull = [];    // array semua score semua bulan
+    let sanksiPerPelanggaran = 0;
+    let scoreChart = null, violationChart = null;
+    let chartTwIndikator = null, chartTwTotal = null;
     let requestsCurrentPage = 1, violationsCurrentPage = 1;
     const itemsPerPage = 10;
 
@@ -32,6 +38,23 @@
 
     const MONTHS_ID = ['', 'JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI',
         'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'];
+
+    const TRIWULAN = {
+        'TW I':   ['JANUARI', 'FEBRUARI', 'MARET'],
+        'TW II':  ['APRIL', 'MEI', 'JUNI'],
+        'TW III': ['JULI', 'AGUSTUS', 'SEPTEMBER'],
+        'TW IV':  ['OKTOBER', 'NOVEMBER', 'DESEMBER']
+    };
+
+    const BBM_UNITS = [
+        'Sekretariat',
+        'Bidang Koperasi',
+        'Bidang UKM',
+        'Bidang Usaha Mikro',
+        'Bidang Kewirausahaan',
+        'Balai Layanan Usaha Terpadu KUMKM'
+    ];
+    const BBM_UNITS_SHORT = ['Sekretariat', 'Koperasi', 'UKM', 'Usaha Mikro', 'Kewirausahaan', 'BLUT'];
 
     // ── SVG Icons ─────────────────────────────────────────────
     const ICONS = {
@@ -55,6 +78,7 @@
         mapPin: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
         money: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`,
         tag: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>`,
+        chevronRight: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`,
     };
 
     // ── Helpers ───────────────────────────────────────────────
@@ -140,6 +164,10 @@
         } catch (e) { return null; }
     }
     function clearCache() { Object.values(CACHE_KEYS).forEach(k => localStorage.removeItem(k)); }
+    // Hapus hanya cache scores agar triwulan bisa direfresh
+    function clearScoreCache() {
+        Object.keys(localStorage).filter(k => k.startsWith(CACHE_KEYS.SCORES)).forEach(k => localStorage.removeItem(k));
+    }
     function showCacheIndicator() {
         const el = document.getElementById('bbm-cacheIndicator');
         if (el) { el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2000); }
@@ -163,7 +191,6 @@
     function callAPIPost(params) {
         return new Promise((resolve, reject) => {
             const t = setTimeout(() => reject(new Error('timeout')), 60000);
-
             fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -173,7 +200,6 @@
                 .then(r => r.text())
                 .then(text => {
                     clearTimeout(t);
-                    console.log('[BBM] Raw POST response:', text.slice(0, 300));
                     try { resolve(JSON.parse(text)); }
                     catch (e) { resolve({ success: false, message: 'Respons tidak valid' }); }
                 })
@@ -214,22 +240,17 @@
         });
     }
 
-    // ── Date helpers (FIXED) ──────────────────────────────────
+    // ── Date helpers ──────────────────────────────────────────
     function normalizeDisplayDate(val) {
         if (!val || val === '-') return '-';
         const s = String(val).trim();
-
-        // Bila data dari backend sudah rapi (misal: 14/04/2026 23:52)
         if (s.includes('/')) return s;
-
-        // Coba parsing standar
         try {
             const dt = new Date(s);
             if (!isNaN(dt)) {
                 const pad = n => String(n).padStart(2, '0');
                 const hasTime = s.includes('T') || s.includes(':');
                 const datePart = `${pad(dt.getDate())}/${pad(dt.getMonth() + 1)}/${dt.getFullYear()}`;
-                // Jika waktu tercatat sebagai tengah malam (00:00), tampilkan tanggal saja
                 if (hasTime && dt.getHours() === 0 && dt.getMinutes() === 0) return datePart;
                 return hasTime ? `${datePart} ${pad(dt.getHours())}:${pad(dt.getMinutes())}` : datePart;
             }
@@ -241,9 +262,8 @@
         if (!str || str === '-') return '';
         try {
             let dtStr = str;
-            // Jika format DD/MM/YYYY HH:mm
             if (str.includes('/')) {
-                const parts = str.split(/[\s/:]+/); // [14, 04, 2026, 23, 52]
+                const parts = str.split(/[\s/:]+/);
                 if (parts.length >= 3) {
                     dtStr = `${parts[2]}-${parts[1]}-${parts[0]}T${parts[3] || '00'}:${parts[4] || '00'}`;
                 }
@@ -298,6 +318,7 @@
         if (tabName === 'requests') loadRequests();
         else if (tabName === 'violations') loadViolations();
         else if (tabName === 'scores') loadScores();
+        else if (tabName === 'triwulan') bbmRenderTriwulan();
     }
     window.bbmSwitchTab = bbmSwitchTab;
     window.bbmSwitchTabDropdown = (v) => {
@@ -306,6 +327,7 @@
         if (v === 'requests') loadRequests();
         else if (v === 'violations') loadViolations();
         else if (v === 'scores') loadScores();
+        else if (v === 'triwulan') bbmRenderTriwulan();
     };
 
     function updateStats() {
@@ -321,6 +343,7 @@
         if (r) r.textContent = masterRequests.filter(x => (x.status || '').toUpperCase() === 'REJECTED').length;
     }
 
+    // ── Filter TANPA LOADING (pakai masterRequests in-memory) ─
     function bbmApplyFilter() {
         const status = (document.getElementById('bbm-filter-status')?.value || '').toUpperCase();
         const term = (document.getElementById('bbm-search-req')?.value || '').toLowerCase();
@@ -334,6 +357,14 @@
         requestsCurrentPage = 1; renderPaginatedRequests();
     }
     window.bbmApplyFilter = bbmApplyFilter;
+
+    // Filter violations TANPA LOADING
+    window.bbmApplyViolFilter = () => {
+        const bulan = document.getElementById('bbm-filter-bulan-viol')?.value || '';
+        const unit = document.getElementById('bbm-filter-unit-viol')?.value || '';
+        allViolations = masterViolations.filter(v => (!bulan || v.bulan === bulan) && (!unit || v.unit === unit));
+        violationsCurrentPage = 1; renderPaginatedViolations();
+    };
 
     // ═══════════════════════════════════════════════════════════
     // TAB 1 — PERMINTAAN VOUCHER
@@ -617,11 +648,9 @@
         const orig = btn.innerHTML;
         btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-sm"></span> Menyetujui...';
         try {
-            // Kirim waktu lokal (WIB) dengan format baku YYYY-MM-DDTHH:mm
             const now = new Date();
             const pad = n => String(n).padStart(2, '0');
             const localTglPengambilan = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
-
             const res = await callAPI({
                 action: 'updateVoucherRequest',
                 id: currentApproveId,
@@ -656,11 +685,8 @@
     // ── Complete Modal ────────────────────────────────────────
     window.bbmOpenComplete = (id) => {
         currentCompleteId = id;
-
-        // Reset state foto
         selectedBuktiFotoFile = null;
         selectedBuktiFotoBase64 = null;
-
         const req = masterRequests.find(r => String(r.id) === String(id));
         const infoEl = document.getElementById('bbm-complete-req-info');
         if (infoEl && req) {
@@ -685,20 +711,12 @@
                     </div>
                 </div>`;
         }
-
-        // Set default date & time (waktu saat tombol ditekan)
         const tglInput = document.getElementById('bbm-complete-tgl');
         if (tglInput) {
             const now = new Date();
-            const yyyy = now.getFullYear();
-            const mm = String(now.getMonth() + 1).padStart(2, '0');
-            const dd = String(now.getDate()).padStart(2, '0');
-            const hh = String(now.getHours()).padStart(2, '0');
-            const min = String(now.getMinutes()).padStart(2, '0');
-            tglInput.value = `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+            const pad = n => String(n).padStart(2, '0');
+            tglInput.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
         }
-
-        // Reset UI file
         const fileInput = document.getElementById('bbm-complete-foto');
         const preview = document.getElementById('bbm-complete-foto-preview');
         const fileInfo = document.getElementById('bbm-complete-foto-info');
@@ -709,26 +727,20 @@
         if (fileInfo) fileInfo.textContent = '';
         if (fileError) { fileError.style.display = 'none'; fileError.textContent = ''; }
         if (progressBar) progressBar.style.display = 'none';
-
         openModal('bbm-completeModal');
     };
 
-    // ── Handle file pilih ────────────────────────────────────
     window.bbmHandleCompleteFile = async (input) => {
         const file = input.files[0];
         const info = document.getElementById('bbm-complete-foto-info');
         const errEl = document.getElementById('bbm-complete-foto-error');
         const preview = document.getElementById('bbm-complete-foto-preview');
         const previewImg = document.getElementById('bbm-complete-foto-img');
-
-        selectedBuktiFotoFile = null;
-        selectedBuktiFotoBase64 = null;
+        selectedBuktiFotoFile = null; selectedBuktiFotoBase64 = null;
         if (info) info.textContent = '';
         if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
         if (preview) preview.style.display = 'none';
-
         if (!file) return;
-
         const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
         if (!allowed.includes(file.type)) {
             if (errEl) { errEl.textContent = '❌ Format tidak didukung. Gunakan JPG, PNG, WEBP, atau PDF.'; errEl.style.display = 'block'; }
@@ -738,32 +750,24 @@
             if (errEl) { errEl.textContent = `❌ Ukuran terlalu besar (${(file.size / 1024 / 1024).toFixed(1)} MB). Maks 10 MB.`; errEl.style.display = 'block'; }
             input.value = ''; return;
         }
-
         if (preview && previewImg && file.type.startsWith('image/')) {
-            previewImg.src = URL.createObjectURL(file);
-            preview.style.display = 'block';
+            previewImg.src = URL.createObjectURL(file); preview.style.display = 'block';
         }
-
         if (info) info.textContent = 'Membaca file...';
-
         try {
             const fileToUpload = await bbmResizeImage(file, 800, 0.7);
             const base64 = await bbmReadFileAsBase64(fileToUpload);
-            selectedBuktiFotoFile = fileToUpload;
-            selectedBuktiFotoBase64 = base64;
+            selectedBuktiFotoFile = fileToUpload; selectedBuktiFotoBase64 = base64;
             const sizeKB = Math.round((base64.length * 3 / 4) / 1024);
             if (info) info.textContent = `✅ ${file.name} (±${sizeKB} KB siap upload)`;
         } catch (e) {
             if (errEl) { errEl.textContent = '❌ Gagal membaca file: ' + e.message; errEl.style.display = 'block'; }
-            selectedBuktiFotoFile = null;
-            selectedBuktiFotoBase64 = null;
+            selectedBuktiFotoFile = null; selectedBuktiFotoBase64 = null;
         }
     };
 
-    // ── Batalkan file yang dipilih ─────────────────────────────
     window.bbmCancelFotoFile = () => {
-        selectedBuktiFotoFile = null;
-        selectedBuktiFotoBase64 = null;
+        selectedBuktiFotoFile = null; selectedBuktiFotoBase64 = null;
         const fileInput = document.getElementById('bbm-complete-foto');
         const preview = document.getElementById('bbm-complete-foto-preview');
         const info = document.getElementById('bbm-complete-foto-info');
@@ -789,41 +793,24 @@
         if (fill) fill.style.width = '0%';
     }
 
-    // ── Confirm Complete ──────────────────────────────────────
     window.bbmConfirmComplete = async () => {
         const tglInputRaw = document.getElementById('bbm-complete-tgl')?.value;
         if (!tglInputRaw) {
             if (window.showToast) showToast('Tanggal dan waktu pengembalian harus diisi', 'error');
-            else alert('Tanggal dan waktu pengembalian harus diisi');
             return;
         }
-
         const btn = document.getElementById('bbm-confirm-complete-btn');
         const orig = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner spinner-sm"></span> Menyimpan...';
-
+        btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-sm"></span> Menyimpan...';
         try {
             let fotoUrl = '';
-
-            // Kirim langsung nilai format datetime-local (ISO format YYYY-MM-DDTHH:mm)
-            // Backend Apps Script mengenali ini dengan sempurna di new Date(tgl_pengembalian)
             const tglPengembalianStorage = tglInputRaw;
-
             if (selectedBuktiFotoFile) {
                 let base64ToSend = selectedBuktiFotoBase64;
-                if (!base64ToSend) {
-                    btn.innerHTML = '<span class="spinner spinner-sm"></span> Membaca file...';
-                    bbmSetProgress(10, 'Membaca file...');
-                    base64ToSend = await bbmReadFileAsBase64(selectedBuktiFotoFile);
-                }
-
-                btn.innerHTML = '<span class="spinner spinner-sm"></span> Mengupload foto...';
-                bbmSetProgress(30, 'Mengupload foto ke Drive...');
-
+                if (!base64ToSend) { btn.innerHTML = '<span class="spinner spinner-sm"></span> Membaca file...'; bbmSetProgress(10, 'Membaca file...'); base64ToSend = await bbmReadFileAsBase64(selectedBuktiFotoFile); }
+                btn.innerHTML = '<span class="spinner spinner-sm"></span> Mengupload foto...'; bbmSetProgress(30, 'Mengupload foto ke Drive...');
                 const req = masterRequests.find(r => String(r.id) === String(currentCompleteId));
                 const nomorKendaraan = req?.nomor_kendaraan || '';
-
                 let bulanReq = MONTHS_ID[new Date().getMonth() + 1];
                 if (req?.tgl_pengambilan) {
                     const parts = req.tgl_pengambilan.split('-');
@@ -832,65 +819,26 @@
                         if (bulanIdx >= 1 && bulanIdx <= 12) bulanReq = MONTHS_ID[bulanIdx];
                     }
                 }
-
                 const ext = selectedBuktiFotoFile.name.split('.').pop().toLowerCase() || 'jpg';
                 const fileName = `BUKTI_BBM_${currentCompleteId}_${Date.now()}.${ext}`;
-
                 try {
-                    const uploadRes = await callAPIPost({
-                        action: 'uploadVoucherPhoto',
-                        fileData: base64ToSend,
-                        fileName: fileName,
-                        mimeType: selectedBuktiFotoFile.type,
-                        nomor_kendaraan: nomorKendaraan,
-                        bulan: bulanReq
-                    });
-
+                    const uploadRes = await callAPIPost({ action: 'uploadVoucherPhoto', fileData: base64ToSend, fileName, mimeType: selectedBuktiFotoFile.type, nomor_kendaraan: nomorKendaraan, bulan: bulanReq });
                     bbmSetProgress(80, 'Foto berhasil diupload...');
-                    if (uploadRes && uploadRes.success && uploadRes.fileUrl) {
-                        fotoUrl = uploadRes.fileUrl;
-                    } else {
-                        if (window.showToast) showToast('Upload foto gagal. Data tetap disimpan tanpa foto.', 'error');
-                    }
-                } catch (uploadErr) {
-                    if (window.showToast) showToast('Upload foto error. Data disimpan tanpa foto.', 'error');
-                }
+                    if (uploadRes && uploadRes.success && uploadRes.fileUrl) fotoUrl = uploadRes.fileUrl;
+                    else if (window.showToast) showToast('Upload foto gagal. Data tetap disimpan tanpa foto.', 'error');
+                } catch (uploadErr) { if (window.showToast) showToast('Upload foto error. Data disimpan tanpa foto.', 'error'); }
             }
-
-            btn.innerHTML = '<span class="spinner spinner-sm"></span> Menyimpan status...';
-            bbmSetProgress(90, 'Menyimpan status ke spreadsheet...');
-
-            const res = await callAPI({
-                action: 'completeVoucherRequest',
-                id: currentCompleteId,
-                link_foto_bukti: fotoUrl,
-                tgl_pengembalian: tglPengembalianStorage
-            });
-
+            btn.innerHTML = '<span class="spinner spinner-sm"></span> Menyimpan status...'; bbmSetProgress(90, 'Menyimpan status ke spreadsheet...');
+            const res = await callAPI({ action: 'completeVoucherRequest', id: currentCompleteId, link_foto_bukti: fotoUrl, tgl_pengembalian: tglPengembalianStorage });
             bbmSetProgress(100, 'Selesai!');
-
             if (res && (res.success || res.status === 'success')) {
-                const msg = fotoUrl
-                    ? '✅ Berhasil! Foto terupload dan data tersimpan.'
-                    : '✅ Berhasil! Data tersimpan (tanpa foto).';
+                const msg = fotoUrl ? '✅ Berhasil! Foto terupload dan data tersimpan.' : '✅ Berhasil! Data tersimpan (tanpa foto).';
                 if (window.showToast) showToast(msg, 'success');
-                closeModal('bbm-completeModal');
-                selectedBuktiFotoFile = null;
-                selectedBuktiFotoBase64 = null;
-                clearCache();
-                await loadRequests(true);
-            } else {
-                throw new Error(res?.message || 'Server gagal menyimpan status COMPLETED');
-            }
-
-        } catch (e) {
-            if (window.showToast) showToast('Error: ' + e.message, 'error');
-            console.error('[BBM Complete]', e);
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = orig;
-            bbmHideProgress();
-        }
+                closeModal('bbm-completeModal'); selectedBuktiFotoFile = null; selectedBuktiFotoBase64 = null;
+                clearCache(); await loadRequests(true);
+            } else throw new Error(res?.message || 'Server gagal menyimpan status COMPLETED');
+        } catch (e) { if (window.showToast) showToast('Error: ' + e.message, 'error'); console.error('[BBM Complete]', e); }
+        finally { btn.disabled = false; btn.innerHTML = orig; bbmHideProgress(); }
     };
 
     // ── Edit Request ──────────────────────────────────────────
@@ -965,13 +913,6 @@
         }
     }
     window.bbmLoadViolations = (f) => loadViolations(f);
-
-    window.bbmApplyViolFilter = () => {
-        const bulan = document.getElementById('bbm-filter-bulan-viol')?.value || '';
-        const unit = document.getElementById('bbm-filter-unit-viol')?.value || '';
-        allViolations = masterViolations.filter(v => (!bulan || v.bulan === bulan) && (!unit || v.unit === unit));
-        violationsCurrentPage = 1; renderPaginatedViolations();
-    };
 
     function resolveViol(safeId) {
         try {
@@ -1073,7 +1014,6 @@
                             ${(r.status||'').toUpperCase()==='COMPLETED' ? 'Selesai' : 'Disetujui'}
                         </span>
                     </div>
-                    <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${r.timestamp || ''}</div>
                 </div>
             </div>`).join('');
     }
@@ -1131,12 +1071,7 @@
         }
         const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-sm"></span> Menyimpan...';
         try {
-            const res = await callAPI({
-                action: 'createBBMViolation', bulan, unit,
-                tanggal_pengambilan: tglAmbilRaw, // KIRIM LANGSUNG FORMAT YYYY-MM-DD
-                tanggal_pengembalian: tglKembaliRaw ? tglKembaliRaw : '-', // KIRIM LANGSUNG FORMAT YYYY-MM-DD
-                nomor_kendaraan: noKendaraan
-            });
+            const res = await callAPI({ action: 'createBBMViolation', bulan, unit, tanggal_pengambilan: tglAmbilRaw, tanggal_pengembalian: tglKembaliRaw ? tglKembaliRaw : '-', nomor_kendaraan: noKendaraan });
             if (res?.success) { if (window.showToast) showToast('Catatan berhasil ditambahkan!', 'success'); closeModal('bbm-addViolModal'); clearCache(); await loadViolations(true); }
             else if (window.showToast) showToast(res?.message || 'Gagal', 'error');
         } catch (e) { if (window.showToast) showToast('Error: ' + e.message, 'error'); }
@@ -1184,9 +1119,7 @@
         if (isPindah) {
             badge.style.display = 'flex';
             badge.innerHTML = `⚠️ Data akan dipindahkan dari <strong>${bulanLama} / ${unitLama}</strong> ke <strong>${bulanBaru} / ${unitBaru}</strong>`;
-        } else {
-            badge.style.display = 'none';
-        }
+        } else { badge.style.display = 'none'; }
     };
 
     window.bbmSubmitEditViol = async () => {
@@ -1204,20 +1137,12 @@
         const btn = document.getElementById('bbm-submit-ev-btn');
         const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-sm"></span> Menyimpan...';
         try {
-            const params = {
-                action: 'updateBBMViolation', id: currentEditViol.id,
-                bulan: bulanLama, unit: unitLama,
-                tanggal_pengambilan: tglAmbil, // KIRIM LANGSUNG FORMAT YYYY-MM-DD
-                tanggal_pengembalian: tglKembali ? tglKembali : '-', // KIRIM LANGSUNG FORMAT YYYY-MM-DD
-                nomor_kendaraan: noKendaraan,
-                pindah: isPindah ? '1' : '0'
-            };
+            const params = { action: 'updateBBMViolation', id: currentEditViol.id, bulan: bulanLama, unit: unitLama, tanggal_pengambilan: tglAmbil, tanggal_pengembalian: tglKembali ? tglKembali : '-', nomor_kendaraan: noKendaraan, pindah: isPindah ? '1' : '0' };
             if (isPindah) { params.bulan_baru = bulanBaru; params.unit_baru = unitBaru; }
             const res = await callAPI(params);
             if (res?.success) {
                 if (window.showToast) showToast(res.message || 'Catatan berhasil diperbarui!', 'success');
-                closeModal('bbm-editViolModal'); currentEditViol = null;
-                clearCache(); await loadViolations(true);
+                closeModal('bbm-editViolModal'); currentEditViol = null; clearCache(); await loadViolations(true);
             } else if (window.showToast) showToast(res?.message || 'Gagal', 'error');
         } catch (e) { if (window.showToast) showToast('Error: ' + e.message, 'error'); }
         finally { btn.disabled = false; btn.innerHTML = orig; }
@@ -1237,7 +1162,7 @@
                 const res = await callAPI({ action: 'deleteBBMViolation', id: v.id || '', bulan: v.bulan, unit: v.unit });
                 if (res?.success) {
                     if (window.showToast) showToast('Catatan berhasil dihapus', 'success');
-                    clearCache(); await loadViolations(true); await loadScores(true);
+                    clearCache(); await loadViolations(true); clearScoreCache(); allScoresFull = [];
                 } else {
                     if (window.showToast) showToast(res?.message || 'Gagal', 'error');
                     if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = orig; }
@@ -1251,13 +1176,21 @@
     };
 
     // ═══════════════════════════════════════════════════════════
-    // TAB 3 — PENILAIAN
+    // TAB 3 — PENILAIAN (per bulan)
     // ═══════════════════════════════════════════════════════════
     async function loadScores(forceRefresh = false) {
         let bulan = document.getElementById('bbm-filter-score-bulan')?.value || '';
         if (!bulan) { bulan = MONTHS_ID[new Date().getMonth() + 1]; const el = document.getElementById('bbm-filter-score-bulan'); if (el) el.value = bulan; }
         const ck = CACHE_KEYS.SCORES + '_' + (bulan || 'all');
-        if (!forceRefresh && bulan) { const cached = getFromCache(ck); if (cached) { allScores = cached; renderScoresUI(); showCacheIndicator(); return; } }
+        if (!forceRefresh && bulan) {
+            const cached = getFromCache(ck);
+            if (cached) {
+                // Gunakan cache — update UI saja TANPA loading
+                renderScoresUI(cached.sanksi, cached.scores, bulan);
+                showCacheIndicator(); return;
+            }
+        }
+        // Hanya tampilkan loading jika benar-benar perlu fetch
         const container = document.getElementById('bbm-scores-container');
         if (container) container.innerHTML = '<div class="loading"><div class="spinner"></div><p style="margin-top:12px;">Memuat penilaian...</p></div>';
         const chartsGrid = document.getElementById('bbm-charts-grid');
@@ -1267,23 +1200,34 @@
         try {
             const res = await callAPI({ action: 'getBBMScores', bulan });
             if (res?.success) {
-                allScores = { sanksi: res.sanksiPerPelanggaran, scores: res.scores };
-                if (bulan) saveToCache(ck, allScores);
-                renderScoresUI();
+                if (bulan) saveToCache(ck, { sanksi: res.sanksiPerPelanggaran, scores: res.scores });
+                // Simpan semua skor ke memori untuk triwulan
+                _mergeSkorFull(res.scores);
+                renderScoresUI(res.sanksiPerPelanggaran, res.scores, bulan);
             } else if (container) container.innerHTML = '<div class="empty-state"><p style="color:#ef4444;">Gagal memuat penilaian</p></div>';
         } catch (e) { if (container) container.innerHTML = `<div class="empty-state"><p style="color:#ef4444;">${e.message}</p></div>`; }
     }
     window.bbmLoadScores = (f) => loadScores(f);
 
-    function renderScoresUI() {
-        const bulan = document.getElementById('bbm-filter-score-bulan')?.value || '';
+    // Gabungkan skor baru ke allScoresFull (no duplicates)
+    function _mergeSkorFull(newScores) {
+        if (!Array.isArray(newScores)) return;
+        newScores.forEach(ns => {
+            const idx = allScoresFull.findIndex(s => s.bulan === ns.bulan && s.unit === ns.unit);
+            if (idx >= 0) allScoresFull[idx] = ns;
+            else allScoresFull.push(ns);
+        });
+    }
+
+    function renderScoresUI(sanksi, allScores, bulan) {
+        sanksiPerPelanggaran = sanksi;
         const container = document.getElementById('bbm-scores-container');
         const chartsGrid = document.getElementById('bbm-charts-grid');
         const sanksiBox = document.getElementById('bbm-sanksi-box');
         const sanksiVal = document.getElementById('bbm-sanksi-value');
-        if (allScores.sanksi !== undefined && sanksiBox && sanksiVal) {
+        if (sanksi !== undefined && sanksiBox && sanksiVal) {
             sanksiBox.style.display = 'block';
-            sanksiVal.textContent = `${allScores.sanksi} poin per keterlambatan`;
+            sanksiVal.textContent = `${sanksi} poin per keterlambatan`;
         }
         if (!container) return;
         if (!bulan) {
@@ -1293,7 +1237,7 @@
             if (violationChart) { violationChart.destroy(); violationChart = null; }
             return;
         }
-        const monthScores = (allScores.scores || []).filter(s => s.bulan === bulan);
+        const monthScores = (allScores || []).filter(s => s.bulan === bulan);
         if (!monthScores.length) {
             container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>Tidak ada data untuk bulan ini</p></div>';
             if (chartsGrid) chartsGrid.style.display = 'none';
@@ -1340,6 +1284,250 @@
             type: 'bar', data: { labels: units, datasets: [{ label: 'Keterlambatan', data: violations, backgroundColor: '#3b82f6', borderRadius: 6 }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } } }
         });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // TAB 4 — REKAP TRIWULANAN
+    // ═══════════════════════════════════════════════════════════
+
+    // Hitung rata-rata skor per unit untuk sekumpulan bulan
+    function _calcTWUnitScore(unit, months) {
+        const vals = months
+            .map(m => allScoresFull.find(s => s.bulan === m && s.unit === unit)?.skorAkhir)
+            .filter(v => v !== undefined && v !== null);
+        return vals.length ? parseFloat((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2)) : null;
+    }
+
+    function _calcTWUnitPelanggaran(unit, months) {
+        const vals = months
+            .map(m => allScoresFull.find(s => s.bulan === m && s.unit === unit)?.jumlahPelanggaran)
+            .filter(v => v !== undefined && v !== null);
+        return vals.length ? parseFloat((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)) : null;
+    }
+
+    // Ambil semua skor dari semua bulan yang belum ada di allScoresFull
+    async function _fetchAllScoresIfNeeded() {
+        const allMonths = MONTHS_ID.slice(1); // JANUARI … DESEMBER
+        const missing = allMonths.filter(m => !allScoresFull.some(s => s.bulan === m));
+        if (missing.length === 0) return; // sudah lengkap
+
+        // Coba dari cache dulu
+        const fromCache = [];
+        missing.forEach(m => {
+            const ck = CACHE_KEYS.SCORES + '_' + m;
+            const c = getFromCache(ck);
+            if (c && c.scores) fromCache.push({ m, scores: c.scores });
+        });
+        fromCache.forEach(({ scores }) => _mergeSkorFull(scores));
+
+        // Fetch yang masih kurang
+        const stillMissing = missing.filter(m => !allScoresFull.some(s => s.bulan === m));
+        if (stillMissing.length > 0) {
+            // Ambil semua sekaligus — API sudah mendukung tanpa filter bulan
+            try {
+                const res = await callAPI({ action: 'getBBMScores', bulan: '' });
+                if (res?.success && res.scores) {
+                    sanksiPerPelanggaran = res.sanksiPerPelanggaran;
+                    _mergeSkorFull(res.scores);
+                    // Cache per bulan
+                    MONTHS_ID.slice(1).forEach(m => {
+                        const ms = res.scores.filter(s => s.bulan === m);
+                        if (ms.length) saveToCache(CACHE_KEYS.SCORES + '_' + m, { sanksi: res.sanksiPerPelanggaran, scores: res.scores });
+                    });
+                }
+            } catch (e) {
+                console.warn('[BBM TW] Gagal fetch semua skor:', e.message);
+            }
+        }
+    }
+
+    async function bbmRenderTriwulan() {
+        const container = document.getElementById('bbm-triwulan-content');
+        if (!container) return;
+
+        // Tampilkan loading ringan (hanya jika data belum ada)
+        if (allScoresFull.length === 0) {
+            container.innerHTML = `<div style="text-align:center;padding:60px;color:#94a3b8;"><div class="spinner"></div><div style="margin-top:12px;">Memuat data triwulanan...</div></div>`;
+            await _fetchAllScoresIfNeeded();
+        } else {
+            // Data sudah ada — render langsung, fetch di background
+            _bbmRenderTriwulanUI(container);
+            _fetchAllScoresIfNeeded().then(() => _bbmRenderTriwulanUI(container));
+            return;
+        }
+
+        _bbmRenderTriwulanUI(container);
+    }
+    window.bbmRenderTriwulan = bbmRenderTriwulan;
+    window.bbmRefreshTriwulan = async () => {
+        clearScoreCache(); allScoresFull = [];
+        await bbmRenderTriwulan();
+    };
+
+    function _bbmRenderTriwulanUI(container) {
+        const twKeys = Object.keys(TRIWULAN);
+        const twColors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899'];
+        const twBgs   = ['#eff6ff', '#f0fdf4', '#fffbeb', '#fdf2f8'];
+
+        // Pilihan triwulan yang sedang aktif (untuk chart detail)
+        const twSelectEl = document.getElementById('bbm-tw-select');
+        const twSelected = twSelectEl?.value || 'TW I';
+        const twSelectedMonths = TRIWULAN[twSelected];
+
+        // Build grid: per unit, nilai rata-rata tiap TW
+        const grid = BBM_UNITS.map(unit => {
+            const twData = twKeys.map(tw => _calcTWUnitScore(unit, TRIWULAN[tw]));
+            const allVals = twData.filter(v => v !== null);
+            return { unit, twData, best: allVals.length ? Math.max(...allVals) : null, worst: allVals.length ? Math.min(...allVals) : null };
+        });
+
+        // Summary cards per TW
+        const twSummaries = twKeys.map((tw, twIdx) => {
+            const vals = grid.map(r => ({ unit: r.unit, val: r.twData[twIdx] })).filter(r => r.val !== null);
+            vals.sort((a, b) => b.val - a.val);
+            const avg = vals.length ? (vals.reduce((a, r) => a + r.val, 0) / vals.length).toFixed(2) : '—';
+            return { tw, highest: vals[0] || null, lowest: vals[vals.length - 1] || null, avg, assessed: vals.length };
+        });
+
+        // Chart data untuk TW terpilih
+        const chartSkorData = BBM_UNITS.map(u => _calcTWUnitScore(u, twSelectedMonths) || 0);
+        const chartViolData = BBM_UNITS.map(u => _calcTWUnitPelanggaran(u, twSelectedMonths) || 0);
+
+        // Summary cards HTML
+        const summaryCards = twSummaries.map((s, i) => `
+        <div style="background:${twBgs[i]};border:1.5px solid ${twColors[i]}33;border-radius:12px;padding:16px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${twColors[i]};margin-bottom:6px;">${s.tw}</div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:10px;">${TRIWULAN[s.tw][0].slice(0,3)} – ${TRIWULAN[s.tw][2].slice(0,3)}</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+                <div style="background:white;border-radius:8px;padding:8px 10px;border:1px solid #e5e7eb;">
+                    <div style="font-size:10px;color:#64748b;font-weight:600;margin-bottom:2px;">🏆 TERTINGGI</div>
+                    ${s.highest
+                        ? `<div style="font-size:12px;font-weight:700;color:#065f46;">${s.highest.unit.replace('Balai Layanan Usaha Terpadu KUMKM','BLUT').replace('Bidang ','')}</div>
+                           <div style="font-size:18px;font-weight:800;color:${twColors[i]};">${s.highest.val}<span style="font-size:11px;color:#94a3b8;">/5</span></div>`
+                        : '<div style="color:#94a3b8;font-size:12px;">Belum ada data</div>'}
+                </div>
+                <div style="background:white;border-radius:8px;padding:8px 10px;border:1px solid #e5e7eb;">
+                    <div style="font-size:10px;color:#64748b;font-weight:600;margin-bottom:2px;">📉 TERENDAH</div>
+                    ${s.lowest && s.lowest !== s.highest
+                        ? `<div style="font-size:12px;font-weight:700;color:#991b1b;">${s.lowest.unit.replace('Balai Layanan Usaha Terpadu KUMKM','BLUT').replace('Bidang ','')}</div>
+                           <div style="font-size:18px;font-weight:800;color:#ef4444;">${s.lowest.val}<span style="font-size:11px;color:#94a3b8;">/5</span></div>`
+                        : '<div style="color:#94a3b8;font-size:12px;">Belum ada data</div>'}
+                </div>
+                <div style="text-align:center;padding:6px;background:white;border-radius:8px;border:1px solid #e5e7eb;">
+                    <div style="font-size:10px;color:#64748b;margin-bottom:2px;">Rata-rata</div>
+                    <div style="font-size:16px;font-weight:700;color:${twColors[i]};">${s.avg}</div>
+                    <div style="font-size:10px;color:#94a3b8;">${s.assessed} unit dinilai</div>
+                </div>
+            </div>
+        </div>`).join('');
+
+        // Tabel detail
+        const twHeaderCells = twKeys.map((tw, i) => `<th style="text-align:center;background:${twBgs[i]};color:${twColors[i]};">${tw}<br><small style="opacity:.7;font-size:10px;">${TRIWULAN[tw][0].slice(0,3)}-${TRIWULAN[tw][2].slice(0,3)}</small></th>`).join('');
+        const tableRows = grid.map(row => {
+            const shortUnit = row.unit.replace('Balai Layanan Usaha Terpadu KUMKM', 'BLUT').replace('Bidang ', '');
+            const twCells = row.twData.map((val, i) => {
+                if (val === null) return `<td style="text-align:center;color:#94a3b8;font-size:12px;">—</td>`;
+                const isBest  = val === row.best && row.best !== null;
+                const isWorst = val === row.worst && row.worst !== null && row.best !== row.worst;
+                const color = val >= 4.5 ? '#065f46' : val >= 3 ? '#92400e' : '#991b1b';
+                return `<td style="text-align:center;">
+                    <div style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;">
+                        <span style="font-weight:700;color:${color};font-size:15px;">${val}</span>
+                        ${isBest  ? '<span style="font-size:9px;background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:6px;font-weight:600;">BEST</span>' : ''}
+                        ${isWorst ? '<span style="font-size:9px;background:#fee2e2;color:#991b1b;padding:1px 5px;border-radius:6px;font-weight:600;">LOW</span>'  : ''}
+                    </div>
+                </td>`;
+            }).join('');
+            const filledVals = row.twData.filter(v => v !== null);
+            const annualAvg = filledVals.length ? (filledVals.reduce((a, b) => a + b, 0) / filledVals.length).toFixed(2) : '—';
+            const annualColor = parseFloat(annualAvg) >= 4.5 ? '#065f46' : parseFloat(annualAvg) >= 3 ? '#92400e' : '#991b1b';
+            return `<tr>
+                <td style="font-weight:600;font-size:13px;">${shortUnit}</td>
+                ${twCells}
+                <td style="text-align:center;"><strong style="font-size:15px;color:${annualColor};">${annualAvg}</strong></td>
+            </tr>`;
+        }).join('');
+
+        container.innerHTML = `
+        <!-- Summary cards -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px;">
+            ${summaryCards}
+        </div>
+
+        <!-- Chart section -->
+        <div class="card" style="margin-bottom:20px;">
+            <div class="card-header">
+                <h3 class="card-title">📊 Chart per Triwulan</h3>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <label style="font-size:13px;color:#64748b;font-weight:600;">Pilih Triwulan:</label>
+                    <select class="select-input" id="bbm-tw-select" onchange="bbmRenderTriwulan()" style="min-width:120px;">
+                        ${twKeys.map(tw => `<option value="${tw}" ${tw === twSelected ? 'selected' : ''}>${tw} (${TRIWULAN[tw][0].slice(0,3)}–${TRIWULAN[tw][2].slice(0,3)})</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+            <div class="card-content">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px;">Skor Akhir Per Unit — ${twSelected}</div>
+                        <div class="chart-container"><canvas id="bbm-tw-scoreChart"></canvas></div>
+                    </div>
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px;">Rata-rata Keterlambatan — ${twSelected}</div>
+                        <div class="chart-container"><canvas id="bbm-tw-violChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detail table -->
+        <div class="card" style="margin-bottom:0;">
+            <div class="card-header">
+                <h3 class="card-title">📋 Rekap Nilai Per Triwulan — Semua Unit</h3>
+                <span style="font-size:12px;color:#64748b;">Rata-rata skor akhir dari bulan yang sudah diisi</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;padding:10px 12px;background:#f8fafc;font-size:12px;color:#64748b;font-weight:700;min-width:140px;">Unit / Bidang</th>
+                            ${twHeaderCells}
+                            <th style="text-align:center;background:#1a2942;color:white;font-size:12px;padding:10px 12px;">Rata-rata<br>Tahunan</th>
+                        </tr>
+                    </thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+            </div>
+            <div style="padding:12px 16px;border-top:1px solid #f1f5f9;font-size:12px;color:#64748b;display:flex;gap:16px;flex-wrap:wrap;">
+                <span>🏆 <strong>BEST</strong> = skor terbaik unit dalam 4 TW</span>
+                <span>📉 <strong>LOW</strong> = skor terendah unit</span>
+                <span>≥4.5 = <span style="color:#065f46;font-weight:600;">Sangat Baik</span> · ≥3 = <span style="color:#92400e;font-weight:600;">Cukup</span> · &lt;3 = <span style="color:#991b1b;font-weight:600;">Kurang</span></span>
+            </div>
+        </div>`;
+
+        // Render chart setelah DOM tersedia
+        setTimeout(() => {
+            if (chartTwIndikator) { chartTwIndikator.destroy(); chartTwIndikator = null; }
+            if (chartTwTotal) { chartTwTotal.destroy(); chartTwTotal = null; }
+            const ctx1 = document.getElementById('bbm-tw-scoreChart');
+            const ctx2 = document.getElementById('bbm-tw-violChart');
+            if (!ctx1 || !ctx2) return;
+            chartTwIndikator = new Chart(ctx1.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: BBM_UNITS_SHORT,
+                    datasets: [{ label: 'Skor Akhir', data: chartSkorData, borderRadius: 6, backgroundColor: chartSkorData.map(v => v >= 4.5 ? '#10b981' : v >= 3 ? '#f59e0b' : v > 0 ? '#ef4444' : '#e2e8f0') }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `Skor: ${ctx.parsed.y.toFixed(2)}/5` } } }, scales: { y: { beginAtZero: true, max: 5, ticks: { stepSize: 0.5 }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } }
+            });
+            chartTwTotal = new Chart(ctx2.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: BBM_UNITS_SHORT,
+                    datasets: [{ label: 'Rata-rata Keterlambatan', data: chartViolData, borderRadius: 6, backgroundColor: '#3b82f6' }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `Rata-rata: ${ctx.parsed.y.toFixed(1)}×` } } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 0.5 }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } }
+            });
+        }, 80);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -1393,22 +1581,25 @@
 <div class="container">
     <div class="section-page-header">
         <h1 class="section-page-title">Voucher BBM</h1>
-        <p class="section-page-subtitle">Manajemen permintaan, catatan pelanggaran, dan penilaian voucher BBM</p>
+        <p class="section-page-subtitle">Manajemen permintaan, catatan pelanggaran, penilaian, dan rekap triwulanan voucher BBM</p>
     </div>
 
     <div class="tabs">
         <button class="tab active" onclick="bbmSwitchTab('requests',event)">Permintaan</button>
         <button class="tab" onclick="bbmSwitchTab('violations',event)">Catatan Pelanggaran</button>
         <button class="tab" onclick="bbmSwitchTab('scores',event)">Penilaian</button>
+        <button class="tab" onclick="bbmSwitchTab('triwulan',event)">Rekap Triwulan</button>
     </div>
     <div class="tabs-dropdown">
         <select onchange="bbmSwitchTabDropdown(this.value)">
             <option value="requests">Permintaan</option>
             <option value="violations">Catatan Pelanggaran</option>
             <option value="scores">Penilaian</option>
+            <option value="triwulan">Rekap Triwulan</option>
         </select>
     </div>
 
+    <!-- TAB PERMINTAAN -->
     <div id="bbm-tab-requests" class="tab-content active">
         <div class="stats-grid">
             <div class="stat-card" style="border-left:3px solid #64748b;"><div class="stat-label">Total</div><div class="stat-value" id="bbm-stat-total">0</div></div>
@@ -1453,6 +1644,7 @@
         </div>
     </div>
 
+    <!-- TAB PELANGGARAN -->
     <div id="bbm-tab-violations" class="tab-content">
         <div class="card">
             <div class="card-header">
@@ -1478,6 +1670,7 @@
         </div>
     </div>
 
+    <!-- TAB PENILAIAN -->
     <div id="bbm-tab-scores" class="tab-content">
         <div class="card">
             <div class="card-header">
@@ -1502,8 +1695,28 @@
             </div>
         </div>
     </div>
+
+    <!-- TAB REKAP TRIWULAN -->
+    <div id="bbm-tab-triwulan" class="tab-content">
+        <div class="card" style="margin-bottom:16px;">
+            <div class="card-header">
+                <h2 class="card-title">📅 Rekap Nilai Triwulanan BBM</h2>
+                <button onclick="bbmRefreshTriwulan()" class="btn btn-sm">${ICONS.refresh} Refresh</button>
+            </div>
+            <div class="card-content">
+                <div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:6px;padding:10px 14px;font-size:13px;color:#1e3a8a;">
+                    📌 <strong>Kriteria:</strong> TW I = Jan–Mar · TW II = Apr–Jun · TW III = Jul–Sep · TW IV = Okt–Des.
+                    Nilai triwulan = rata-rata skor akhir bulan yang sudah diisi.
+                </div>
+            </div>
+        </div>
+        <div id="bbm-triwulan-content">
+            <div style="text-align:center;padding:60px;color:#94a3b8;"><div class="spinner"></div><div style="margin-top:12px;">Memuat rekap triwulan...</div></div>
+        </div>
+    </div>
 </div>
 
+<!-- MODAL DETAIL -->
 <div id="bbm-detailModal" class="modal-overlay" onclick="if(event.target===this)this.style.display='none'">
     <div class="modal" style="max-width:580px;">
         <div class="modal-header"><h2 class="modal-title">Detail Permintaan Voucher BBM</h2></div>
@@ -1514,6 +1727,7 @@
     </div>
 </div>
 
+<!-- MODAL APPROVE -->
 <div id="bbm-approveModal" class="modal-overlay" onclick="if(event.target===this)this.style.display='none'">
     <div class="modal" style="max-width:500px;">
         <div class="modal-header"><h2 class="modal-title" style="display:flex;align-items:center;gap:8px;">${ICONS.check} Setujui Permintaan Voucher BBM</h2></div>
@@ -1547,6 +1761,7 @@
     </div>
 </div>
 
+<!-- MODAL COMPLETE -->
 <div id="bbm-completeModal" class="modal-overlay" onclick="if(event.target===this)this.style.display='none'">
     <div class="modal" style="max-width:480px;">
         <div class="modal-header">
@@ -1554,43 +1769,32 @@
         </div>
         <div class="modal-content" style="padding:20px;">
             <div style="background:#f8fafc;border:1px solid #f1f5f9;border-radius:10px;padding:14px;margin-bottom:18px;" id="bbm-complete-req-info"></div>
-            
             <div class="form-group" style="margin-bottom: 16px;">
                 <label class="input-label" style="font-size:12px;font-weight:600;color:#475569;margin-bottom:6px;display:block;">Tanggal & Waktu Pengembalian Bukti <span style="color:#ef4444;">*</span></label>
                 <input type="datetime-local" class="form-input" id="bbm-complete-tgl" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-family:inherit;" required>
             </div>
-
             <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#1e40af;">
                 ℹ️ Pegawai telah mengembalikan sobekan voucher dan nota SPBU. Upload foto bukti (opsional), lalu klik Selesaikan.
             </div>
-
             <div style="background:#fafafa;border:1.5px dashed #cbd5e1;border-radius:10px;padding:16px;">
                 <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:10px;display:flex;align-items:center;gap:6px;">
                     📎 Foto Bukti Pengembalian
                     <span style="background:#fef3c7;color:#92400e;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;">Opsional</span>
                 </div>
-
                 <label for="bbm-complete-foto" style="display:block;cursor:pointer;">
-                    <input type="file" id="bbm-complete-foto" accept="image/*,.pdf"
-                        style="display:none;"
-                        onchange="bbmHandleCompleteFile(this)">
+                    <input type="file" id="bbm-complete-foto" accept="image/*,.pdf" style="display:none;" onchange="bbmHandleCompleteFile(this)">
                     <div class="bbm-upload-zone">
                         <div style="font-size:24px;margin-bottom:4px;">📷</div>
                         <div style="font-size:13px;color:#64748b;"><strong style="color:#3b82f6;">Klik untuk pilih foto</strong></div>
                         <div style="font-size:11px;color:#94a3b8;margin-top:4px;">JPG · PNG · WEBP · PDF | Maks 10 MB</div>
                     </div>
                 </label>
-
                 <div id="bbm-complete-foto-error" style="display:none;font-size:12px;color:#ef4444;margin-top:6px;padding:6px 10px;background:#fee2e2;border-radius:5px;"></div>
-
                 <div id="bbm-complete-foto-info" style="font-size:12px;color:#10b981;margin-top:6px;font-weight:500;"></div>
-
                 <div id="bbm-complete-foto-preview" style="display:none;margin-top:8px;position:relative;">
                     <img id="bbm-complete-foto-img" class="bbm-foto-preview" alt="Preview foto bukti">
-                    <button onclick="bbmCancelFotoFile()"
-                        style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.5);border:none;color:white;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;">✕</button>
+                    <button onclick="bbmCancelFotoFile()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.5);border:none;color:white;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;">✕</button>
                 </div>
-
                 <div id="bbm-complete-progress" style="display:none;margin-top:10px;" class="bbm-progress-wrap">
                     <div class="bbm-progress-bar">
                         <div id="bbm-complete-progress-fill" class="bbm-progress-fill" style="width:0%;"></div>
@@ -1608,6 +1812,7 @@
     </div>
 </div>
 
+<!-- MODAL EDIT STATUS -->
 <div id="bbm-editModal" class="modal-overlay" onclick="if(event.target===this)this.style.display='none'">
     <div class="modal" style="max-width:420px;">
         <div class="modal-header"><h2 class="modal-title">Ubah Status Permintaan</h2></div>
@@ -1630,6 +1835,7 @@
     </div>
 </div>
 
+<!-- MODAL TAMBAH PELANGGARAN -->
 <div id="bbm-addViolModal" class="modal-overlay" onclick="if(event.target===this)this.style.display='none'">
     <div class="modal" style="max-width:680px;">
         <div class="modal-header"><h2 class="modal-title">Tambah Catatan Pelanggaran BBM</h2></div>
@@ -1680,6 +1886,7 @@
     </div>
 </div>
 
+<!-- MODAL EDIT PELANGGARAN -->
 <div id="bbm-editViolModal" class="modal-overlay" onclick="if(event.target===this)this.style.display='none'">
     <div class="modal">
         <div class="modal-header"><h2 class="modal-title">Edit Catatan Pelanggaran BBM</h2></div>

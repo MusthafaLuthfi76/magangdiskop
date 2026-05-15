@@ -2,6 +2,7 @@
 // ruang-rapat.js — Ruang Rapat section (SPA)
 // Admin Panel — Dinas Koperasi UKM
 // Update: tambah field Difabel [12] dan Permintaan Khusus [13]
+// Update: tambah Tab Rekap Triwulan + filter Penilaian tanpa reload
 // ============================================================
 (function () {
     'use strict';
@@ -12,7 +13,14 @@
 
     let masterRequests = [], allRequests = [];
     let masterViolations = [], allViolations = [];
-    let allScores = {}, scoreChart = null, violationChart = null;
+
+    // ★ DIUBAH: allScores sekarang menyimpan SEMUA data (array lengkap dari server)
+    // bukan per-bulan. Filter hanya re-render dari sini.
+    let allScoresRaw = [];          // raw array dari server (semua bulan)
+    let sanksiPerPelanggaran = 0;   // nilai sanksi dari server
+    let scoreChart = null, violationChart = null;
+    let twChart1 = null, twChart2 = null;
+
     let currentApproveId = null, currentEditId = null;
     let currentEditViol = null;
     let selectedApprovedReq = null;
@@ -30,14 +38,26 @@
         'Open Space', 'Coworking Space'
     ];
 
+    const ALL_UNITS = [
+        'Sekretariat', 'Bidang Koperasi', 'Bidang UKM',
+        'Bidang Usaha Mikro', 'Bidang Kewirausahaan', 'Balai Layanan Usaha Terpadu KUMKM'
+    ];
+
+    const TRIWULAN = {
+        'TW I':   ['JANUARI', 'FEBRUARI', 'MARET'],
+        'TW II':  ['APRIL', 'MEI', 'JUNI'],
+        'TW III': ['JULI', 'AGUSTUS', 'SEPTEMBER'],
+        'TW IV':  ['OKTOBER', 'NOVEMBER', 'DESEMBER']
+    };
+
     const ICONS = {
         refresh: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`,
-        plus: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+        plus: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
         check: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
         checkCircle: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
         x: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
         eye: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
-        edit: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+        edit: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
         trash: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
         door: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"/><circle cx="15.5" cy="12" r="0.5" fill="currentColor"/></svg>`,
         user: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
@@ -46,9 +66,9 @@
         clock: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
         users: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
         fileText: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`,
-        // ★ BARU
         wheelchair: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4" r="1.5"/><path d="M9 8h3l2 6h4"/><path d="M9 8l-1 7"/><path d="M8 15a5 5 0 1 0 9.4 2.5"/></svg>`,
         note: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="12" y1="17" x2="8" y2="17"/></svg>`,
+        chevronRight: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`,
     };
 
     const OPT_BULAN = `<option value="">Pilih Bulan</option>
@@ -76,7 +96,6 @@
         <option>Ruang Wahyu Tumurun</option><option>Ruang Ratu Ratih</option>
         <option>Open Space</option><option>Coworking Space</option>`;
 
-    // ★ BARU: opsi difabel
     const OPT_DIFABEL = `
         <option value="">Pilih jawaban</option>
         <option value="Ya">Ya</option>
@@ -197,12 +216,16 @@
         if (tabName === 'requests') loadRequests();
         else if (tabName === 'violations') loadViolations();
         else if (tabName === 'scores') loadScores();
+        else if (tabName === 'triwulan') renderTriwulan();
     }
     window.rrSwitchTab = rrSwitchTab;
     window.rrSwitchTabDD = (v) => {
         document.querySelectorAll('#section-ruang-rapat .tab-content').forEach(tc => tc.classList.remove('active'));
         const el = document.getElementById('rr-tab-' + v); if (el) el.classList.add('active');
-        if (v === 'requests') loadRequests(); else if (v === 'violations') loadViolations(); else if (v === 'scores') loadScores();
+        if (v === 'requests') loadRequests();
+        else if (v === 'violations') loadViolations();
+        else if (v === 'scores') loadScores();
+        else if (v === 'triwulan') renderTriwulan();
     };
 
     function updateStats() {
@@ -276,8 +299,6 @@
             const ruangan = (req.namaRuang && req.namaRuang !== '-')
                 ? `<span style="font-weight:500;">${req.namaRuang}</span>`
                 : `<span style="color:#94a3b8;font-size:12px;">Belum ditentukan</span>`;
-
-            // ★ BARU: tampilkan badge difabel
             const difabel = req.difabel || 'Tidak Tahu';
             const difabelHtml = difabelBadge(difabel);
 
@@ -358,8 +379,6 @@
         const statusBg = statusS === 'approved' ? '#f0fdf4' : statusS === 'rejected' ? '#fff1f2' : statusS === 'completed' ? '#eff6ff' : '#fffbeb';
         const statusLabel = statusS === 'approved' ? 'Disetujui' : statusS === 'rejected' ? 'Ditolak' : statusS === 'completed' ? 'Selesai' : 'Menunggu';
         const ruangan = (req.namaRuang && req.namaRuang !== '-') ? req.namaRuang : 'Belum Ditentukan';
-
-        // ★ BARU: data difabel & permintaan khusus
         const difabelVal = req.difabel || 'Tidak Tahu';
         const permKhusus = (req.permintaan_khusus || '').trim();
 
@@ -370,7 +389,6 @@
                 <span style="font-weight:700;color:${statusColor};font-size:14px;">${statusLabel}</span>
                 <span style="margin-left:auto;font-size:12px;color:#64748b;">${req.id || ''}</span>
             </div>
-
             <div class="req-detail-section">
                 <div class="req-detail-section-title">Informasi Pemohon</div>
                 <div class="req-detail-grid-2">
@@ -378,7 +396,6 @@
                     <div class="req-detail-field"><div class="req-detail-field-icon" style="background:#f0fdf4;color:#10b981;">${ICONS.building}</div><div><div class="req-detail-field-label">Unit Eselon</div><div class="req-detail-field-value">${req.unit_eselon || '-'}</div></div></div>
                 </div>
             </div>
-
             <div class="req-detail-section">
                 <div class="req-detail-section-title">Jadwal Penggunaan</div>
                 <div class="req-detail-grid-3">
@@ -387,7 +404,6 @@
                     <div class="req-detail-field"><div class="req-detail-field-icon" style="background:#fff7ed;color:#f97316;">${ICONS.clock}</div><div><div class="req-detail-field-label">Waktu Selesai</div><div class="req-detail-field-value">${req.waktu_selesai || '-'}</div></div></div>
                 </div>
             </div>
-
             <div class="req-detail-section">
                 <div class="req-detail-section-title">Ruang Rapat</div>
                 <div class="req-detail-vehicle-box" style="border-color:${ruangan !== 'Belum Ditentukan' ? '#10b981' : '#e2e8f0'};background:${ruangan !== 'Belum Ditentukan' ? '#f0fdf4' : '#f8fafc'};">
@@ -395,13 +411,10 @@
                 </div>
                 ${req.jumlah_peserta ? `<div class="req-detail-field" style="margin-top:10px;"><div class="req-detail-field-icon" style="background:#eff6ff;color:#3b82f6;">${ICONS.users}</div><div><div class="req-detail-field-label">Jumlah Peserta</div><div class="req-detail-field-value">${req.jumlah_peserta} Orang</div></div></div>` : ''}
             </div>
-
             <div class="req-detail-section">
                 <div class="req-detail-section-title">Detail Keperluan</div>
                 <div class="req-detail-field"><div class="req-detail-field-icon" style="background:#eff6ff;color:#3b82f6;">${ICONS.fileText}</div><div style="flex:1;"><div class="req-detail-field-label">Agenda / Kegiatan</div><div class="req-detail-field-value">${req.kegiatan || req.keperluan || '-'}</div></div></div>
             </div>
-
-            <!-- ★ BARU: Informasi Aksesibilitas -->
             <div class="req-detail-section">
                 <div class="req-detail-section-title">Informasi Aksesibilitas</div>
                 <div class="req-detail-grid-2">
@@ -518,11 +531,8 @@
 
     window.rrQuickReject = (id, btnEl) => {
         showConfirmModal({
-            icon: '❌',
-            title: 'Tolak Permintaan?',
-            message: 'Permintaan ruang rapat ini akan ditolak.',
-            confirmText: 'Ya, Tolak',
-            confirmClass: 'btn-warning',
+            icon: '❌', title: 'Tolak Permintaan?', message: 'Permintaan ruang rapat ini akan ditolak.',
+            confirmText: 'Ya, Tolak', confirmClass: 'btn-warning',
         }, async () => {
             const orig = btnEl ? btnEl.innerHTML : null;
             if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner spinner-sm"></span>'; }
@@ -536,11 +546,8 @@
 
     window.rrMarkAsCompleted = (id, btnEl) => {
         showConfirmModal({
-            icon: '✅',
-            title: 'Tandai Selesai?',
-            message: 'Permintaan ini akan ditandai sebagai <strong>Selesai</strong>.',
-            confirmText: 'Ya, Selesai',
-            confirmClass: 'btn-success',
+            icon: '✅', title: 'Tandai Selesai?', message: 'Permintaan ini akan ditandai sebagai <strong>Selesai</strong>.',
+            confirmText: 'Ya, Selesai', confirmClass: 'btn-success',
         }, async () => {
             const orig = btnEl.innerHTML; btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner spinner-sm"></span>';
             try {
@@ -551,7 +558,6 @@
         });
     };
 
-    // ── Edit pengajuan — termasuk difabel & permintaan_khusus ─
     window.rrOpenEdit = (id) => {
         const req = masterRequests.find(r => String(r.id) === String(id)); if (!req) return;
         currentEditId = id;
@@ -565,7 +571,6 @@
         setVal('rr-edit-peserta', req.jumlah_peserta);
         setVal('rr-edit-room', req.namaRuang);
         setVal('rr-edit-status', (req.status || 'PENDING').toUpperCase());
-        // ★ BARU
         setVal('rr-edit-difabel', req.difabel || 'Tidak Tahu');
         setVal('rr-edit-permintaan-khusus', req.permintaan_khusus || '');
         openModal('rr-editModal');
@@ -577,8 +582,7 @@
         try {
             const tanggalInput = document.getElementById('rr-edit-tanggal')?.value || '';
             const res = await callAPI({
-                action: 'updateRoomRequest',
-                id: currentEditId,
+                action: 'updateRoomRequest', id: currentEditId,
                 nama_pemohon: document.getElementById('rr-edit-nama')?.value || '',
                 unit_eselon: document.getElementById('rr-edit-unit')?.value || '',
                 tanggal: inputDateToStorage(tanggalInput),
@@ -588,7 +592,6 @@
                 jumlah_peserta: document.getElementById('rr-edit-peserta')?.value || '',
                 namaRuang: document.getElementById('rr-edit-room')?.value || '',
                 status: document.getElementById('rr-edit-status')?.value || 'PENDING',
-                // ★ BARU
                 difabel: document.getElementById('rr-edit-difabel')?.value || 'Tidak Tahu',
                 permintaan_khusus: document.getElementById('rr-edit-permintaan-khusus')?.value || ''
             });
@@ -600,11 +603,9 @@
 
     window.rrDeleteRequest = (id, btnEl) => {
         showConfirmModal({
-            icon: '🗑️',
-            title: 'Hapus Permintaan?',
+            icon: '🗑️', title: 'Hapus Permintaan?',
             message: 'Permintaan ruang rapat ini akan dihapus permanen. <span style="color:#ef4444;font-weight:600;">Tindakan ini tidak dapat dibatalkan.</span>',
-            confirmText: 'Ya, Hapus',
-            confirmClass: 'btn-danger',
+            confirmText: 'Ya, Hapus', confirmClass: 'btn-danger',
         }, async () => {
             const orig = btnEl ? btnEl.innerHTML : null;
             if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner spinner-sm"></span>'; }
@@ -798,13 +799,18 @@
         btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-sm"></span> Menyimpan...';
         try {
             const res = await callAPI({ action: 'createRoomViolation', bulan, unit, tanggal: inputDateToStorage(tglInput), namaRuang, laporan });
-            if (res.success) { if (window.showToast) showToast('Catatan berhasil ditambahkan!', 'success'); closeModal('rr-addViolModal'); clearCache(); await loadViolations(true); await loadScores(true); }
+            if (res.success) {
+                if (window.showToast) showToast('Catatan berhasil ditambahkan!', 'success');
+                closeModal('rr-addViolModal'); clearCache();
+                await loadViolations(true);
+                // Refresh scores jika sudah pernah di-load
+                if (allScoresRaw.length > 0) await loadScores(true);
+            }
             else { if (window.showToast) showToast(res.message || 'Gagal menyimpan', 'error'); }
         } catch (e) { if (window.showToast) showToast('Gagal: ' + e.message, 'error'); }
         finally { btn.disabled = false; btn.innerHTML = orig; }
     };
 
-    // ── EDIT VIOLATION ────────────────────────────────────────
     window.rrOpenEditViol = (safeV) => {
         const v = resolveViol(safeV);
         if (!v) { if (window.showToast) showToast('Data tidak ditemukan', 'error'); return; }
@@ -838,19 +844,20 @@
         btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-sm"></span> Menyimpan...';
         try {
             const res = await callAPI({
-                action: 'updateRoomViolation',
-                id: currentEditViol.id,
-                bulan: bulanLama,
-                unit: unitLama,
-                tanggal: inputDateToStorage(tanggalInput),
-                namaRuang,
-                laporan,
+                action: 'updateRoomViolation', id: currentEditViol.id,
+                bulan: bulanLama, unit: unitLama,
+                tanggal: inputDateToStorage(tanggalInput), namaRuang, laporan,
                 tanggal_lama: currentEditViol.tanggal,
                 pindah: isPindah ? '1' : '0',
                 bulan_baru: isPindah ? bulanBaru : undefined,
                 unit_baru: isPindah ? unitBaru : undefined
             });
-            if (res.success) { if (window.showToast) showToast(res.message || 'Catatan berhasil diperbarui!', 'success'); closeModal('rr-editViolModal'); currentEditViol = null; clearCache(); await loadViolations(true); await loadScores(true); }
+            if (res.success) {
+                if (window.showToast) showToast(res.message || 'Catatan berhasil diperbarui!', 'success');
+                closeModal('rr-editViolModal'); currentEditViol = null; clearCache();
+                await loadViolations(true);
+                if (allScoresRaw.length > 0) await loadScores(true);
+            }
             else if (window.showToast) showToast(res.message || 'Gagal', 'error');
         } catch (e) { if (window.showToast) showToast('Gagal: ' + e.message, 'error'); }
         finally { btn.disabled = false; btn.innerHTML = orig; }
@@ -860,17 +867,19 @@
         const v = resolveViol(safeV);
         if (!v) { if (window.showToast) showToast('Data tidak ditemukan', 'error'); return; }
         showConfirmModal({
-            icon: '🗑️',
-            title: 'Hapus Catatan Pelanggaran?',
+            icon: '🗑️', title: 'Hapus Catatan Pelanggaran?',
             message: `Unit: <strong>${v.unit}</strong><br>Bulan: <strong>${v.bulan}</strong><br>Tanggal: <strong>${normalizeDisplayDate(v.tanggal)}</strong><br><br><span style="color:#ef4444;font-weight:600;">Tindakan ini tidak dapat dibatalkan.</span>`,
-            confirmText: 'Ya, Hapus',
-            confirmClass: 'btn-danger',
+            confirmText: 'Ya, Hapus', confirmClass: 'btn-danger',
         }, async () => {
             const orig = btnEl ? btnEl.innerHTML : null;
             if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner spinner-sm"></span>'; }
             try {
                 const res = await callAPI({ action: 'deleteRoomViolation', id: v.id, bulan: v.bulan, unit: v.unit });
-                if (res.success) { if (window.showToast) showToast('Catatan berhasil dihapus', 'success'); clearCache(); await loadViolations(true); await loadScores(true); }
+                if (res.success) {
+                    if (window.showToast) showToast('Catatan berhasil dihapus', 'success');
+                    clearCache(); await loadViolations(true);
+                    if (allScoresRaw.length > 0) await loadScores(true);
+                }
                 else { if (window.showToast) showToast(res.message || 'Gagal', 'error'); if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = orig; } }
             } catch (e) {
                 if (window.showToast) showToast('Gagal: ' + e.message, 'error');
@@ -879,37 +888,91 @@
         });
     };
 
-    // ═══ TAB 3: SCORES ═══════════════════════════════════════
+    // ═══ TAB 3: SCORES — tanpa reload saat filter ════════════
+    // ★ DIUBAH: fetch sekali, simpan di allScoresRaw, filter hanya re-render
+
     async function loadScores(forceRefresh = false) {
+        // Jika data sudah ada dan tidak forceRefresh, langsung render
+        if (!forceRefresh && allScoresRaw.length > 0) {
+            renderScores();
+            return;
+        }
+
+        // Set bulan default
         let bulan = document.getElementById('rr-filter-score-bulan')?.value || '';
-        if (!bulan) { bulan = MONTHS_ID[new Date().getMonth() + 1]; const el = document.getElementById('rr-filter-score-bulan'); if (el) el.value = bulan; }
-        const ck = `${CACHE_KEYS.SCORES}_${bulan}`;
+        if (!bulan) {
+            bulan = MONTHS_ID[new Date().getMonth() + 1];
+            const el = document.getElementById('rr-filter-score-bulan');
+            if (el) el.value = bulan;
+        }
+
+        const ck = CACHE_KEYS.SCORES;
+        if (!forceRefresh) {
+            const cached = getFromCache(ck);
+            if (cached) {
+                allScoresRaw = cached.scores || [];
+                sanksiPerPelanggaran = cached.sanksi || 0;
+                const sv = document.getElementById('rr-sanksi-value');
+                if (sv) sv.textContent = `${sanksiPerPelanggaran} poin`;
+                renderScores();
+                showCacheIndicator();
+                return;
+            }
+        }
+
+        const container = document.getElementById('rr-scores-container');
+        if (container) container.innerHTML = '<div class="loading"><div class="spinner"></div><p style="margin-top:12px;">Memuat penilaian...</p></div>';
+
         try {
-            if (!forceRefresh && bulan) { const cached = getFromCache(ck); if (cached) { allScores = cached; renderScores(); showCacheIndicator(); return; } }
-            const container = document.getElementById('rr-scores-container');
-            if (container) container.innerHTML = '<div class="loading"><div class="spinner"></div><p style="margin-top:12px;">Memuat penilaian...</p></div>';
             const data = await callAPI({ action: 'getRoomScores' });
             if (data?.success) {
-                allScores = { sanksi: data.sanksiPerPelanggaran, scores: data.scores };
-                const sv = document.getElementById('rr-sanksi-value'); if (sv) sv.textContent = `${data.sanksiPerPelanggaran} poin`;
-                if (bulan) saveToCache(ck, allScores);
+                allScoresRaw = data.scores || [];
+                sanksiPerPelanggaran = data.sanksiPerPelanggaran || 0;
+                // Simpan ke cache
+                saveToCache(ck, { scores: allScoresRaw, sanksi: sanksiPerPelanggaran });
+                const sv = document.getElementById('rr-sanksi-value');
+                if (sv) sv.textContent = `${sanksiPerPelanggaran} poin`;
                 renderScores();
+                // Juga refresh triwulan kalau tab sedang aktif
+                const twTab = document.getElementById('rr-tab-triwulan');
+                if (twTab && twTab.classList.contains('active')) renderTriwulan();
             } else throw new Error(data?.message || 'Respons tidak valid');
         } catch (e) {
-            const container = document.getElementById('rr-scores-container');
             if (container) container.innerHTML = `<div class="empty-state"><p style="color:#ef4444;">${e.message}</p></div>`;
         }
     }
     window.rrLoadScores = (f) => loadScores(f);
 
+    // ★ BARU: dipanggil saat filter bulan berubah — tidak fetch ulang ke server
+    window.rrFilterScores = () => {
+        renderScores();
+    };
+
     function renderScores() {
         const bulan = document.getElementById('rr-filter-score-bulan')?.value || '';
         const c = document.getElementById('rr-scores-container'); if (!c) return;
-        if (!bulan) { c.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div><p>Pilih bulan untuk melihat penilaian</p></div>'; if (scoreChart) scoreChart.destroy(); if (violationChart) violationChart.destroy(); return; }
-        if (!allScores.scores) { c.innerHTML = '<div class="empty-state"><p style="color:#ef4444;">Data tidak tersedia</p></div>'; return; }
-        const monthScores = allScores.scores.filter(s => s.bulan === bulan);
-        if (!monthScores.length) { c.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>Tidak ada data untuk bulan ini</p></div>'; if (scoreChart) scoreChart.destroy(); if (violationChart) violationChart.destroy(); return; }
-        renderCharts(monthScores);
+
+        if (!bulan) {
+            c.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div><p>Pilih bulan untuk melihat penilaian</p></div>';
+            if (scoreChart) { scoreChart.destroy(); scoreChart = null; }
+            if (violationChart) { violationChart.destroy(); violationChart = null; }
+            return;
+        }
+        if (!allScoresRaw.length) {
+            c.innerHTML = '<div class="empty-state"><p style="color:#ef4444;">Data tidak tersedia. Klik Refresh untuk memuat.</p></div>';
+            return;
+        }
+
+        const monthScores = allScoresRaw.filter(s => s.bulan === bulan);
+        if (!monthScores.length) {
+            c.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>Tidak ada data untuk bulan ini</p></div>';
+            if (scoreChart) { scoreChart.destroy(); scoreChart = null; }
+            if (violationChart) { violationChart.destroy(); violationChart = null; }
+            return;
+        }
+
+        renderScoreCharts(monthScores);
+
         c.innerHTML = '<div class="scores-grid">' + monthScores.map(score => {
             const s = parseFloat(score.skorAkhir) || 0;
             const cls = s >= 4.5 ? 'score-good' : s >= 3 ? 'score-warning' : 'score-danger';
@@ -924,7 +987,7 @@
         }).join('') + '</div>';
     }
 
-    function renderCharts(monthScores) {
+    function renderScoreCharts(monthScores) {
         const units = monthScores.map(s => s.unit.length > 25 ? s.unit.substring(0, 22) + '...' : s.unit);
         const scores = monthScores.map(s => parseFloat(s.skorAkhir) || 0);
         const violations = monthScores.map(s => parseInt(s.jumlahPelanggaran) || 0);
@@ -941,6 +1004,217 @@
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
         });
     }
+
+    // ═══ TAB 4: REKAP TRIWULAN ════════════════════════════════
+
+    function renderTriwulan() {
+        const container = document.getElementById('rr-triwulan-content');
+        if (!container) return;
+
+        // Kalau belum ada data, minta load dulu
+        if (!allScoresRaw.length) {
+            container.innerHTML = `<div style="text-align:center;padding:60px;color:#94a3b8;">
+                <div style="font-size:40px;margin-bottom:12px;">📊</div>
+                <p>Data penilaian belum dimuat.</p>
+                <button onclick="rrLoadScoresForTriwulan()" class="btn btn-primary" style="margin-top:12px;">${ICONS.refresh} Muat Data</button>
+            </div>`;
+            return;
+        }
+
+        const twKeys = Object.keys(TRIWULAN);
+        const twColors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899'];
+        const twBgs   = ['#eff6ff', '#f0fdf4', '#fffbeb', '#fdf2f8'];
+
+        // Helper: rata-rata skor unit untuk sekumpulan bulan
+        function calcUnitTW(unit, months) {
+            const vals = months.map(m => {
+                const s = allScoresRaw.find(x => x.bulan === m && x.unit === unit);
+                return s ? parseFloat(s.skorAkhir) : null;
+            }).filter(v => v !== null && v > 0);
+            return vals.length ? parseFloat((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2)) : null;
+        }
+
+        // Build grid data per unit
+        const grid = ALL_UNITS.map(unit => {
+            const twData = twKeys.map(tw => calcUnitTW(unit, TRIWULAN[tw]));
+            const filledVals = twData.filter(v => v !== null);
+            return {
+                unit,
+                twData,
+                best: filledVals.length ? Math.max(...filledVals) : null,
+                worst: filledVals.length ? Math.min(...filledVals) : null,
+                annualAvg: filledVals.length ? parseFloat((filledVals.reduce((a, b) => a + b, 0) / filledVals.length).toFixed(2)) : null
+            };
+        });
+
+        // Summary per TW
+        const twSummaries = twKeys.map((tw, twIdx) => {
+            const vals = grid.map(r => ({ unit: r.unit, val: r.twData[twIdx] })).filter(r => r.val !== null);
+            vals.sort((a, b) => b.val - a.val);
+            const avg = vals.length ? (vals.reduce((a, r) => a + r.val, 0) / vals.length).toFixed(2) : '—';
+            return { tw, highest: vals[0] || null, lowest: vals[vals.length - 1] || null, avg, assessed: vals.length };
+        });
+
+        // Pilih TW untuk chart
+        const selectedTW = document.getElementById('rr-tw-select')?.value || 'TW I';
+        const selectedMonths = TRIWULAN[selectedTW];
+        const chartUnits = ALL_UNITS.map(u => u.replace('Balai Layanan Usaha Terpadu KUMKM', 'BLUT').replace('Bidang ', '').replace('Sekretariat', 'Sekre'));
+        const chartTotData = ALL_UNITS.map(u => calcUnitTW(u, selectedMonths) || 0);
+        const pelanggaran = ALL_UNITS.map(u => {
+            const vals = selectedMonths.map(m => {
+                const s = allScoresRaw.find(x => x.bulan === m && x.unit === u);
+                return s ? parseInt(s.jumlahPelanggaran) || 0 : 0;
+            });
+            return vals.length ? parseFloat((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)) : 0;
+        });
+
+        // Summary cards
+        const summaryCards = twSummaries.map((s, i) => `
+        <div style="background:${twBgs[i]};border:1.5px solid ${twColors[i]}33;border-radius:12px;padding:16px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${twColors[i]};margin-bottom:6px;">${s.tw}</div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:10px;">${TRIWULAN[s.tw][0].slice(0,3)} – ${TRIWULAN[s.tw][2].slice(0,3)}</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+                <div style="background:white;border-radius:8px;padding:8px 10px;border:1px solid #e5e7eb;">
+                    <div style="font-size:10px;color:#64748b;font-weight:600;margin-bottom:2px;">🏆 TERTINGGI</div>
+                    ${s.highest
+                        ? `<div style="font-size:12px;font-weight:700;color:#065f46;">${s.highest.unit.replace('Balai Layanan Usaha Terpadu KUMKM','BLUT').replace('Bidang ','')}</div><div style="font-size:18px;font-weight:800;color:${twColors[i]};">${s.highest.val}<span style="font-size:11px;color:#94a3b8;">/5</span></div>`
+                        : '<div style="color:#94a3b8;font-size:12px;">Belum ada data</div>'}
+                </div>
+                <div style="background:white;border-radius:8px;padding:8px 10px;border:1px solid #e5e7eb;">
+                    <div style="font-size:10px;color:#64748b;font-weight:600;margin-bottom:2px;">📉 TERENDAH</div>
+                    ${s.lowest && s.lowest !== s.highest
+                        ? `<div style="font-size:12px;font-weight:700;color:#991b1b;">${s.lowest.unit.replace('Balai Layanan Usaha Terpadu KUMKM','BLUT').replace('Bidang ','')}</div><div style="font-size:18px;font-weight:800;color:#ef4444;">${s.lowest.val}<span style="font-size:11px;color:#94a3b8;">/5</span></div>`
+                        : '<div style="color:#94a3b8;font-size:12px;">Belum ada data</div>'}
+                </div>
+                <div style="text-align:center;padding:6px;background:white;border-radius:8px;border:1px solid #e5e7eb;">
+                    <div style="font-size:10px;color:#64748b;margin-bottom:2px;">Rata-rata</div>
+                    <div style="font-size:16px;font-weight:700;color:${twColors[i]};">${s.avg}</div>
+                    <div style="font-size:10px;color:#94a3b8;">${s.assessed} unit dinilai</div>
+                </div>
+            </div>
+        </div>`).join('');
+
+        // Detail table rows
+        const twHeaderCells = twKeys.map((tw, i) => `<th style="text-align:center;background:${twBgs[i]};color:${twColors[i]};">${tw}<br><small style="opacity:.7;font-size:10px;">${TRIWULAN[tw][0].slice(0,3)}–${TRIWULAN[tw][2].slice(0,3)}</small></th>`).join('');
+
+        const tableRows = grid.map(row => {
+            const shortUnit = row.unit.replace('Balai Layanan Usaha Terpadu KUMKM', 'BLUT').replace('Bidang ', '');
+            const twCells = row.twData.map((val, i) => {
+                if (val === null) return `<td style="text-align:center;color:#94a3b8;font-size:12px;">—</td>`;
+                const isBest = val === row.best && row.best !== null;
+                const isWorst = val === row.worst && row.worst !== null && row.best !== row.worst;
+                const color = val >= 4.5 ? '#065f46' : val >= 3 ? '#92400e' : '#991b1b';
+                return `<td style="text-align:center;">
+                    <div style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;">
+                        <span style="font-weight:700;color:${color};font-size:15px;">${val}</span>
+                        ${isBest ? '<span style="font-size:9px;background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:6px;font-weight:600;">BEST</span>' : ''}
+                        ${isWorst ? '<span style="font-size:9px;background:#fee2e2;color:#991b1b;padding:1px 5px;border-radius:6px;font-weight:600;">LOW</span>' : ''}
+                    </div>
+                </td>`;
+            }).join('');
+            const annualColor = row.annualAvg !== null ? (row.annualAvg >= 4.5 ? '#065f46' : row.annualAvg >= 3 ? '#92400e' : '#991b1b') : '#94a3b8';
+            return `<tr>
+                <td style="font-weight:600;font-size:13px;">${shortUnit}</td>
+                ${twCells}
+                <td style="text-align:center;"><strong style="font-size:15px;color:${annualColor};">${row.annualAvg !== null ? row.annualAvg : '—'}</strong></td>
+            </tr>`;
+        }).join('');
+
+        container.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px;">
+            ${summaryCards}
+        </div>
+
+        <!-- Chart Section -->
+        <div class="card" style="margin-bottom:20px;">
+            <div class="card-header">
+                <h3 class="card-title">📊 Chart Rekapitulasi Triwulan</h3>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <label style="font-size:13px;color:#64748b;font-weight:600;">Pilih Triwulan:</label>
+                    <select class="select-input" id="rr-tw-select" onchange="rrRenderTriwulan()" style="min-width:120px;">
+                        ${twKeys.map(tw => `<option value="${tw}" ${tw === selectedTW ? 'selected' : ''}>${tw} (${TRIWULAN[tw][0].slice(0,3)}–${TRIWULAN[tw][2].slice(0,3)})</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+            <div class="card-content">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px;">Skor Akhir Per Unit — ${selectedTW}</div>
+                        <div class="chart-container"><canvas id="rr-tw-chartTotal"></canvas></div>
+                    </div>
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px;">Rata-rata Pelanggaran Per Unit — ${selectedTW}</div>
+                        <div class="chart-container"><canvas id="rr-tw-chartViol"></canvas></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detail Table -->
+        <div class="card" style="margin-bottom:0;">
+            <div class="card-header">
+                <h3 class="card-title">📋 Rekap Skor Akhir Per Triwulan — Semua Unit</h3>
+                <span style="font-size:12px;color:#64748b;">Rata-rata skor dari bulan yang sudah ada data. Maks 5 poin.</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;padding:10px 12px;background:#f8fafc;font-size:12px;color:#64748b;font-weight:700;min-width:140px;">Unit / Bidang</th>
+                            ${twHeaderCells}
+                            <th style="text-align:center;background:#1a2942;color:white;font-size:12px;">Rata-rata<br>Tahunan</th>
+                        </tr>
+                    </thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+            </div>
+            <div style="padding:12px 16px;border-top:1px solid #f1f5f9;font-size:12px;color:#64748b;display:flex;gap:16px;flex-wrap:wrap;">
+                <span>🏆 <strong>BEST</strong> = skor tertinggi unit tsb antar triwulan</span>
+                <span>📉 <strong>LOW</strong> = skor terendah unit tsb</span>
+                <span>≥4.5 = <span style="color:#065f46;font-weight:600;">Baik</span> · ≥3 = <span style="color:#92400e;font-weight:600;">Cukup</span> · &lt;3 = <span style="color:#991b1b;font-weight:600;">Kurang</span></span>
+            </div>
+        </div>`;
+
+        // Render charts setelah DOM
+        setTimeout(() => {
+            if (twChart1) { twChart1.destroy(); twChart1 = null; }
+            if (twChart2) { twChart2.destroy(); twChart2 = null; }
+            const ctx1 = document.getElementById('rr-tw-chartTotal');
+            const ctx2 = document.getElementById('rr-tw-chartViol');
+            if (!ctx1 || !ctx2) return;
+            twChart1 = new Chart(ctx1.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: chartUnits,
+                    datasets: [{ label: 'Skor Akhir', data: chartTotData, borderRadius: 6,
+                        backgroundColor: chartTotData.map(v => v >= 4.5 ? '#10b981' : v >= 3 ? '#f59e0b' : v > 0 ? '#ef4444' : '#e2e8f0') }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `Skor: ${ctx.parsed.y.toFixed(2)}/5` } } },
+                    scales: { y: { beginAtZero: true, max: 5, ticks: { stepSize: 0.5 } } }
+                }
+            });
+            twChart2 = new Chart(ctx2.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: chartUnits,
+                    datasets: [{ label: 'Rata-rata Pelanggaran', data: pelanggaran, backgroundColor: '#3b82f6', borderRadius: 6 }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `Pelanggaran: ${ctx.parsed.y.toFixed(1)}` } } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }, 80);
+    }
+
+    window.rrRenderTriwulan = renderTriwulan;
+    window.rrLoadScoresForTriwulan = async () => {
+        await loadScores(true);
+        renderTriwulan();
+    };
 
     // ═══ HTML ════════════════════════════════════════════════
     window.sectionInits = window.sectionInits || {};
@@ -992,19 +1266,21 @@
 <div class="container">
     <div class="section-page-header">
         <h1 class="section-page-title">Pelayanan Ruang Rapat</h1>
-        <p class="section-page-subtitle">Kelola permintaan, catatan ketidakrapian, dan penilaian penggunaan ruang rapat</p>
+        <p class="section-page-subtitle">Kelola permintaan, catatan ketidakrapian, penilaian, dan rekap triwulan penggunaan ruang rapat</p>
     </div>
 
     <div class="tabs">
         <button class="tab active" onclick="rrSwitchTab('requests',event)">Permintaan</button>
         <button class="tab" onclick="rrSwitchTab('violations',event)">Catatan Pelanggaran</button>
         <button class="tab" onclick="rrSwitchTab('scores',event)">Penilaian</button>
+        <button class="tab" onclick="rrSwitchTab('triwulan',event)">Rekap Triwulan</button>
     </div>
     <div class="tabs-dropdown">
         <select onchange="rrSwitchTabDD(this.value)">
             <option value="requests">Permintaan</option>
             <option value="violations">Catatan Pelanggaran</option>
             <option value="scores">Penilaian</option>
+            <option value="triwulan">Rekap Triwulan</option>
         </select>
     </div>
 
@@ -1031,7 +1307,6 @@
                 </div>
             </div>
             <div class="table-container">
-                <!-- ★ DIPERBARUI: tambah kolom Difabel -->
                 <table>
                     <thead><tr>
                         <th>Nama</th>
@@ -1091,7 +1366,7 @@
             <div class="card-header">
                 <h2 class="card-title">Rekapitulasi Penilaian Penggunaan Ruang Rapat</h2>
                 <div class="filter-container">
-                    <select class="select-input" id="rr-filter-score-bulan" onchange="rrLoadScores(false)">
+                    <select class="select-input" id="rr-filter-score-bulan" onchange="rrFilterScores()">
                         <option value="">Pilih Bulan</option>
                         <option value="JANUARI">Januari</option><option value="FEBRUARI">Februari</option><option value="MARET">Maret</option><option value="APRIL">April</option>
                         <option value="MEI">Mei</option><option value="JUNI">Juni</option><option value="JULI">Juli</option><option value="AGUSTUS">Agustus</option>
@@ -1110,6 +1385,28 @@
                     <div class="card" style="margin:0;"><div class="card-header" style="padding:16px;"><h3 style="font-size:14px;font-weight:600;color:#374151;">Jumlah Pelanggaran Per Unit</h3></div><div class="card-content"><div class="chart-container"><canvas id="rr-violationChart"></canvas></div></div></div>
                 </div>
                 <div id="rr-scores-container"><div class="empty-state"><div class="empty-state-icon">📊</div><p>Pilih bulan untuk melihat penilaian</p></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 4: Rekap Triwulan -->
+    <div id="rr-tab-triwulan" class="tab-content">
+        <div class="card" style="margin-bottom:16px;">
+            <div class="card-header">
+                <h2 class="card-title">📅 Rekap Penilaian Triwulanan</h2>
+                <button onclick="rrLoadScoresForTriwulan()" class="btn btn-sm">${ICONS.refresh} Refresh</button>
+            </div>
+            <div class="card-content">
+                <div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:6px;padding:10px 14px;font-size:13px;color:#1e3a8a;">
+                    📌 <strong>Metode:</strong> TW I = Jan–Mar · TW II = Apr–Jun · TW III = Jul–Sep · TW IV = Okt–Des.
+                    Nilai triwulan = rata-rata skor akhir dari bulan-bulan yang sudah ada data. Maks <strong>5 poin</strong>.
+                </div>
+            </div>
+        </div>
+        <div id="rr-triwulan-content">
+            <div style="text-align:center;padding:60px;color:#94a3b8;">
+                <div style="font-size:40px;margin-bottom:12px;">📊</div>
+                <p>Klik tab ini untuk memuat rekap triwulan.</p>
             </div>
         </div>
     </div>
@@ -1148,7 +1445,7 @@
     </div>
 </div>
 
-<!-- EDIT REQUEST — ★ DIPERBARUI: tambah Difabel & Permintaan Khusus -->
+<!-- EDIT REQUEST -->
 <div id="rr-editModal" class="modal-overlay" onclick="if(event.target===this)this.style.display='none'">
     <div class="modal" style="max-width:600px;">
         <div class="modal-header"><h2 class="modal-title">Edit Permintaan Ruang Rapat</h2></div>
@@ -1172,19 +1469,12 @@
                         <option value="REJECTED">Ditolak</option>
                     </select>
                 </div>
-                <!-- ★ BARU: Difabel & Permintaan Khusus di form edit -->
                 <div class="form-group">
-                    <label class="input-label">
-                        ♿ Peserta Difabel
-                        <span style="font-size:11px;font-weight:400;color:#94a3b8;margin-left:4px;">(opsional)</span>
-                    </label>
+                    <label class="input-label">♿ Peserta Difabel <span style="font-size:11px;font-weight:400;color:#94a3b8;margin-left:4px;">(opsional)</span></label>
                     <select class="form-input" id="rr-edit-difabel">${OPT_DIFABEL}</select>
                 </div>
                 <div class="form-group" style="grid-column:1/-1;">
-                    <label class="input-label">
-                        📌 Permintaan Khusus
-                        <span style="font-size:11px;font-weight:400;color:#94a3b8;margin-left:4px;">(opsional)</span>
-                    </label>
+                    <label class="input-label">📌 Permintaan Khusus <span style="font-size:11px;font-weight:400;color:#94a3b8;margin-left:4px;">(opsional)</span></label>
                     <textarea class="form-textarea" id="rr-edit-permintaan-khusus" rows="2" placeholder="Contoh: butuh proyektor, kursi roda, meja U-shape, dll."></textarea>
                 </div>
             </div>
