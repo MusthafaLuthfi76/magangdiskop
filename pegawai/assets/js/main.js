@@ -122,7 +122,7 @@ function apiGet(params, callback, errorCallback) {
 // ============================================
 let selectedFile = null;
 let selectedArsipFile = null;
-let arsipUploadMode = 'file';
+let arsipUploadMode = 'drive';
 let driveLinksCounter = 1;
 let selectedPengajuanFile = null;
 let selectedMonevFile = null;
@@ -1139,11 +1139,7 @@ async function submitDokumen(event) {
 
     hideWABox('alert-arsip');
 
-    if (arsipUploadMode === 'file') {
-        if (!selectedArsipFile) { alert('❌ Silakan pilih file terlebih dahulu!'); return; }
-    } else {
-        if (getDriveLinks().length === 0) { alert('❌ Silakan isi minimal satu link Google Drive!'); return; }
-    }
+    if (getDriveLinks().length === 0) { alert('❌ Silakan isi minimal satu link Google Drive!'); return; }
 
     const nama = formElement.querySelector('[name="nama"]').value;
     const unit = formElement.querySelector('[name="unit"]').value;
@@ -1153,12 +1149,10 @@ async function submitDokumen(event) {
     const keterangan = formElement.querySelector('[name="keterangan"]')?.value || '';
     const ts = waTimestamp();
 
-    let waMsg;
-    if (arsipUploadMode === 'drive') {
-        const links = getDriveLinks();
-        const linksText = links.map((l, i) => `${i + 1}. ${l}`).join('\n');
-        waMsg =
-            `- UPLOAD DOKUMEN ARSIP (LINK DRIVE)
+    const links = getDriveLinks();
+    const linksText = links.map((l, i) => `${i + 1}. ${l}`).join('\n');
+    const waMsg =
+        `- UPLOAD DOKUMEN ARSIP (LINK DRIVE)
 --------------------
 - Pemohon: ${nama}
 - Unit/Divisi: ${unit}
@@ -1170,23 +1164,9 @@ ${linksText}
 --------------------
 - Diajukan: ${ts}
 Silakan buka dashboard admin untuk memproses pengajuan ini.`;
-    } else {
-        waMsg =
-            `- UPLOAD DOKUMEN ARSIP
---------------------
-- Pemohon: ${nama}
-- Unit/Divisi: ${unit}
-- Jenis Dokumen: ${jenisDok}
-- Bulan/Tahun: ${bulan} / ${tahun}
-- File: ${selectedArsipFile ? selectedArsipFile.name : '-'}
-- Keterangan: ${keterangan || '-'}
---------------------
-- Diajukan: ${ts}
-Silakan buka dashboard admin untuk memproses pengajuan ini.`;
-    }
 
     submitBtn.disabled = true;
-    submitBtn.textContent = arsipUploadMode === 'file' ? 'Mengunggah...' : 'Mengirim...';
+    submitBtn.textContent = 'Mengirim...';
     setProgress('progress-arsip', 'loading-arsip', 15, 'Mempersiapkan data...');
 
     const baseFields = {
@@ -1198,22 +1178,9 @@ Silakan buka dashboard admin untuk memproses pengajuan ini.`;
     };
 
     try {
-        let fields;
-        if (arsipUploadMode === 'drive') {
-            const links = getDriveLinks();
-            fields = { ...baseFields, drive_links: JSON.stringify(links) };
-            setProgress('progress-arsip', 'loading-arsip', 50, 'Mengirim link Drive...');
-        } else {
-            setProgress('progress-arsip', 'loading-arsip', 30, `Membaca file: ${selectedArsipFile.name}`);
-            const base64Data = await fileToBase64(selectedArsipFile);
-            setProgress('progress-arsip', 'loading-arsip', 65, 'Mengunggah ke Google Drive...');
-            fields = {
-                ...baseFields,
-                fileName: selectedArsipFile.name,
-                fileData: base64Data,
-                mimeType: selectedArsipFile.type || 'application/octet-stream',
-            };
-        }
+        const links = getDriveLinks();
+        const fields = { ...baseFields, drive_links: JSON.stringify(links) };
+        setProgress('progress-arsip', 'loading-arsip', 50, 'Mengirim link Drive...');
 
         setProgress('progress-arsip', 'loading-arsip', 80, 'Menyimpan ke sistem...');
         const result = await submitViaIframeFields(fields, 'iframe-arsip');
@@ -1223,9 +1190,7 @@ Silakan buka dashboard admin untuk memproses pengajuan ini.`;
 
         const ok = result?.status === 'success' || result?.success === true;
         if (ok) {
-            const msg = arsipUploadMode === 'file'
-                ? '✓ Dokumen berhasil diunggah ke Google Drive!'
-                : '✓ Link Google Drive berhasil dikirim!';
+            const msg = '✓ Link Google Drive berhasil dikirim!';
             showAlert('alert-arsip', msg, 'success');
             showWhatsAppButton('alert-arsip', waMsg, WA_ADMIN_KEARSIPAN);
 

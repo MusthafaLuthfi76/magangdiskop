@@ -426,82 +426,173 @@
     function renderRekap(bulanFilter) {
         const container = document.getElementById('krs-rekap-container');
         if (!container) return;
-
+    
         if (!bulanFilter) {
             renderRekapAllMonths();
             return;
         }
-
+    
         const bulanUpper = bulanFilter.toUpperCase();
-        const bulanData = rekapData[bulanUpper] || {};
-
+        const bulanData  = rekapData[bulanUpper] || {};
+    
         const rows = UNITS.map(unit => {
             const d = bulanData[unit] || {
-                skorUtuh: 5, jumlahBuktiSalah: 0,
-                jumlahSuratTND: 0, jumlahSanksi: 0, skorAkhir: 0
+                skorUtuh:         5,
+                jumlahBuktiSalah: 0,
+                jumlahSuratTND:   0,
+                sudahSrikandi:    0,
+                jumlahSanksi:     0,
+                skorAkhir:        0,
             };
-            return { unit, data: d };
+            return {
+                unit,
+                skorUtuh:         d.skorUtuh || 5,
+                jumlahBuktiSalah: d.jumlahBuktiSalah || 0,
+                jumlahSuratTND:   d.jumlahSuratTND   || 0,
+                sudahSrikandi:    d.sudahSrikandi     || 0,
+                jumlahSanksi:     d.jumlahSanksi      || 0,
+                skorAkhir:        d.skorAkhir         || 0,
+            };
         });
-
+    
+        // Render chart & tabel
         setTimeout(() => renderRekapChart(rows, bulanFilter), 50);
-
+    
         const tableRows = rows.map((r, i) => {
-            const skor = r.data.skorAkhir;
-            const pct = (skor / 5) * 100;
+            const skor    = r.skorAkhir;
+            const pct     = (skor / 5) * 100;
             const chipCls = pct >= 90 ? 'krs-rekap-great'
-                : pct >= 70 ? 'krs-rekap-good'
-                    : pct >= 50 ? 'krs-rekap-fair' : 'krs-rekap-poor';
-            const progColor = pct >= 90 ? '#10b981' : pct >= 70 ? '#3b82f6' : pct >= 50 ? '#f59e0b' : '#ef4444';
+                        : pct >= 70 ? 'krs-rekap-good'
+                        : pct >= 50 ? 'krs-rekap-fair'
+                        :             'krs-rekap-poor';
+            const progColor = pct >= 90 ? '#10b981'
+                            : pct >= 70 ? '#3b82f6'
+                            : pct >= 50 ? '#f59e0b'
+                            :             '#ef4444';
+    
+            // Srikandi: tampilkan sebagai ikon jika 0 = ada, >0 = tidak ada
+            const srikColor = r.sudahSrikandi === 0
+                ? '#10b981'
+                : '#ef4444';
+            const srikLabel = r.sudahSrikandi === 0
+                ? '<span style="color:#10b981;font-weight:600;">✓ Ada</span>'
+                : `<span style="color:#ef4444;font-weight:600;">✗ Tidak (−${r.sudahSrikandi})</span>`;
+    
             return `<tr>
-                <td><span style="width:22px;height:22px;border-radius:50%;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;">${i + 1}</span></td>
+                <td>
+                    <span style="width:22px;height:22px;border-radius:50%;background:#f1f5f9;
+                        color:#64748b;font-size:11px;font-weight:600;display:inline-flex;
+                        align-items:center;justify-content:center;">${i + 1}</span>
+                </td>
                 <td style="font-weight:600;">${r.unit}</td>
-                <td style="text-align:center;"><span style="font-size:13px;font-weight:600;color:#1e293b;">${r.data.skorUtuh || 5}</span></td>
-                <td style="text-align:center;"><span style="font-size:13px;color:#64748b;">${r.data.jumlahBuktiSalah}</span></td>
-                <td style="text-align:center;"><span style="font-size:13px;color:#64748b;">${r.data.jumlahSuratTND}</span></td>
-                <td style="text-align:center;"><span style="font-size:13px;color:#ef4444;font-weight:600;">-${r.data.jumlahSanksi}</span></td>
+                <td style="text-align:center;">
+                    <span style="font-size:13px;font-weight:700;color:#1e293b;">${r.skorUtuh}</span>
+                </td>
+                <td style="text-align:center;">
+                    <span style="font-size:13px;color:${r.jumlahBuktiSalah > 0 ? '#ef4444' : '#64748b'};
+                        font-weight:${r.jumlahBuktiSalah > 0 ? '600' : '400'};">
+                        ${r.jumlahBuktiSalah > 0 ? '−' : ''}${r.jumlahBuktiSalah}
+                    </span>
+                </td>
+                <td style="text-align:center;">
+                    <span style="font-size:13px;color:${r.jumlahSuratTND > 0 ? '#f59e0b' : '#64748b'};
+                        font-weight:${r.jumlahSuratTND > 0 ? '600' : '400'};">
+                        ${r.jumlahSuratTND > 0 ? '−' : ''}${r.jumlahSuratTND}
+                    </span>
+                </td>
+                <td style="text-align:center;">${srikLabel}</td>
+                <td style="text-align:center;">
+                    <span style="font-size:13px;color:#ef4444;font-weight:600;">
+                        ${r.jumlahSanksi > 0 ? '−' : ''}${r.jumlahSanksi}
+                    </span>
+                </td>
                 <td style="text-align:center;">
                     <div style="display:flex;align-items:center;gap:8px;justify-content:center;">
-                        <div style="flex:1;height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden;min-width:60px;">
-                            <div style="width:${Math.min(pct, 100).toFixed(0)}%;height:100%;background:${progColor};border-radius:3px;"></div>
+                        <div style="flex:1;height:6px;background:#f1f5f9;border-radius:3px;
+                            overflow:hidden;min-width:60px;">
+                            <div style="width:${Math.min(pct, 100).toFixed(0)}%;height:100%;
+                                background:${progColor};border-radius:3px;"></div>
                         </div>
                         <span class="krs-rekap-chip ${chipCls}">${skor.toFixed(1)}</span>
                     </div>
                 </td>
             </tr>`;
         }).join('');
-
+    
         container.innerHTML = `
             <div style="margin-bottom:20px;">
                 <div class="card" style="margin-bottom:0;">
-                    <div class="card-header"><span class="card-title">Grafik Skor Akhir — ${bulanFilter}</span><span class="card-note">Maks. 5 poin per unit · Sumber: Sheet Rekapitulasi</span></div>
-                    <div class="card-content"><div style="position:relative;height:280px;"><canvas id="krs-rekap-chart"></canvas></div></div>
+                    <div class="card-header">
+                        <span class="card-title">Grafik Skor Akhir — ${bulanFilter}</span>
+                        <span class="card-note">Maks. 5 poin per unit · Sumber: Sheet Rekapitulasi</span>
+                    </div>
+                    <div class="card-content">
+                        <div style="position:relative;height:280px;">
+                            <canvas id="krs-rekap-chart"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
+    
             <div class="card" style="margin-bottom:0;">
-                <div class="card-header"><span class="card-title">Tabel Rekapitulasi — ${bulanFilter}</span></div>
+                <div class="card-header">
+                    <span class="card-title">Tabel Rekapitulasi — ${bulanFilter}</span>
+                    <span class="card-note">Data dari sheet <code>REKAPITULASI DOKUMEN ARSIP</code></span>
+                </div>
                 <div class="table-container">
                     <table>
                         <thead><tr>
                             <th>#</th>
                             <th>Unit / Bidang</th>
-                            <th style="text-align:center;">Skor Utuh</th>
-                            <th style="text-align:center;">Bukti Salah+Terlambat</th>
-                            <th style="text-align:center;">Surat Tidak Sesuai TND</th>
-                            <th style="text-align:center;">Jumlah Sanksi</th>
-                            <th style="text-align:center;">Skor Akhir /5</th>
+                            <th style="text-align:center;white-space:nowrap;">
+                                Skor Utuh
+                            </th>
+                            <th style="text-align:center;white-space:nowrap;">
+                                Bukti Salah<br>
+                                <small style="font-weight:400;opacity:.7;">+ Terlambat</small>
+                            </th>
+                            <th style="text-align:center;white-space:nowrap;">
+                                Surat Tdk<br>
+                                <small style="font-weight:400;opacity:.7;">Sesuai TND</small>
+                            </th>
+                            <th style="text-align:center;white-space:nowrap;">
+                                Sudah di<br>
+                                <small style="font-weight:400;opacity:.7;">Srikandi</small>
+                            </th>
+                            <th style="text-align:center;white-space:nowrap;">
+                                Jumlah Sanksi
+                            </th>
+                            <th style="text-align:center;white-space:nowrap;">
+                                Skor Akhir /5
+                            </th>
                         </tr></thead>
                         <tbody>${tableRows}</tbody>
                     </table>
                 </div>
-                <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid #f1f5f9;font-size:12px;">
-                    <div style="display:flex;align-items:center;gap:6px;"><div style="width:12px;height:12px;border-radius:2px;background:#d1fae5;"></div>Sangat Baik ≥4.5</div>
-                    <div style="display:flex;align-items:center;gap:6px;"><div style="width:12px;height:12px;border-radius:2px;background:#dbeafe;"></div>Baik ≥3.5</div>
-                    <div style="display:flex;align-items:center;gap:6px;"><div style="width:12px;height:12px;border-radius:2px;background:#fef3c7;"></div>Cukup ≥2.5</div>
-                    <div style="display:flex;align-items:center;gap:6px;"><div style="width:12px;height:12px;border-radius:2px;background:#fee2e2;"></div>Kurang &lt;2.5</div>
-                    <div style="margin-left:auto;font-size:11px;color:#94a3b8;">Sumber: Sheet <code>REKAPITULASI DOKUMEN ARSIP</code></div>
+                <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;
+                    padding:12px 16px;border-top:1px solid #f1f5f9;font-size:12px;">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <div style="width:12px;height:12px;border-radius:2px;background:#d1fae5;"></div>
+                        Sangat Baik ≥4.5
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <div style="width:12px;height:12px;border-radius:2px;background:#dbeafe;"></div>
+                        Baik ≥3.5
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <div style="width:12px;height:12px;border-radius:2px;background:#fef3c7;"></div>
+                        Cukup ≥2.5
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <div style="width:12px;height:12px;border-radius:2px;background:#fee2e2;"></div>
+                        Kurang &lt;2.5
+                    </div>
+                    <div style="margin-left:auto;font-size:11px;color:#94a3b8;">
+                        Sumber: Sheet <code>REKAPITULASI DOKUMEN ARSIP</code>
+                    </div>
                 </div>
             </div>`;
-
+    
         setTimeout(() => renderRekapChart(rows, bulanFilter), 50);
     }
 
@@ -545,48 +636,68 @@
         const canvas = document.getElementById('krs-rekap-chart');
         if (!canvas) return;
         if (rekapChart) { rekapChart.destroy(); rekapChart = null; }
-
-        const labels = rows.map(r => r.unit.length > 20 ? r.unit.slice(0, 18) + '…' : r.unit);
-        const dataVals = rows.map(r => r.data ? (r.data.skorAkhir || 0) : 0);
+    
+        const labels    = rows.map(r => r.unit.length > 20 ? r.unit.slice(0, 18) + '…' : r.unit);
+        const dataVals  = rows.map(r => r.skorAkhir || 0);
+    
         const colors = dataVals.map(v => {
             const pct = (v / 5) * 100;
-            return pct >= 90 ? '#10b981bb' : pct >= 70 ? '#3b82f6bb' : pct >= 50 ? '#f59e0bbb' : '#ef4444bb';
+            return pct >= 90 ? '#10b981bb'
+                : pct >= 70 ? '#3b82f6bb'
+                : pct >= 50 ? '#f59e0bbb'
+                :             '#ef4444bb';
         });
         const borderColors = dataVals.map(v => {
             const pct = (v / 5) * 100;
-            return pct >= 90 ? '#10b981' : pct >= 70 ? '#3b82f6' : pct >= 50 ? '#f59e0b' : '#ef4444';
+            return pct >= 90 ? '#10b981'
+                : pct >= 70 ? '#3b82f6'
+                : pct >= 50 ? '#f59e0b'
+                :             '#ef4444';
         });
-
+    
         if (typeof Chart === 'undefined') return;
         rekapChart = new Chart(canvas, {
             type: 'bar',
             data: {
                 labels,
                 datasets: [{
-                    label: 'Skor Akhir',
-                    data: dataVals,
+                    label:           'Skor Akhir',
+                    data:            dataVals,
                     backgroundColor: colors,
-                    borderColor: borderColors,
-                    borderWidth: 2,
-                    borderRadius: 6
-                }]
+                    borderColor:     borderColors,
+                    borderWidth:     2,
+                    borderRadius:    6,
+                }],
             },
             options: {
-                responsive: true,
+                responsive:          true,
                 maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
-                    tooltip: { callbacks: { label: c => `${c.raw} / 5 poin (${((c.raw / 5) * 100).toFixed(0)}%)` } }
+                    tooltip: {
+                        callbacks: {
+                            label: c => `${c.raw} / 5 poin (${((c.raw / 5) * 100).toFixed(0)}%)`,
+                        },
+                    },
                 },
                 scales: {
-                    x: { grid: { display: false }, ticks: { font: { family: 'Inter', size: 11 } } },
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { family: 'Inter', size: 11 } },
+                    },
                     y: {
-                        min: 0, max: 5, grid: { color: '#f1f5f9' },
+                        min: 0,
+                        max: 5,
+                        grid: { color: '#f1f5f9' },
                         ticks: { stepSize: 1, font: { family: 'Inter', size: 11 } },
-                        title: { display: true, text: 'Skor Akhir (/5)', font: { family: 'Inter', size: 11 } }
-                    }
-                }
-            }
+                        title: {
+                            display: true,
+                            text:    'Skor Akhir (/5)',
+                            font:    { family: 'Inter', size: 11 },
+                        },
+                    },
+                },
+            },
         });
     }
 

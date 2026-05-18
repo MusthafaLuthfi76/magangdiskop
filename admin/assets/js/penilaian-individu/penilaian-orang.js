@@ -1,24 +1,29 @@
 // ============================================================
-// penilaian-orang.js — Penilaian Per Orang (TRIWULAN) v6.1
+// penilaian-orang.js — Penilaian Per Orang (TRIWULAN) v6.3
 // Admin Panel — Dinas Koperasi UKM
 //
-// PERUBAHAN v6.1 (Bug Fix):
-//  - savePenilaianTW di GAS: hapus validasi 'bulan', pakai 'tw'
-//  - Formula skor diperbaiki & dikonsistenkan:
-//      Tim     = skorTim (0–100) × 0.60  → maks 60 poin
-//      AKHLAK  = rataAkhlak (7–10) × 3   → maks 30 poin
-//      Diklat  = 0 atau 10 (flat)         → maks 10 poin
-//      Total   = Tim + AKHLAK + Diklat    → maks 100
-//  - getDiklatValue: mengembalikan 0 atau 10 (bukan 7/10)
-//  - saveToGAS: field 'tw' dikirim dengan benar, 'bulan' dihapus
+// PERUBAHAN v6.3:
+//  - Tambah tombol DELETE di setiap baris tabel (toolbar)
+//  - Konfirmasi delete lewat showConfirmModal atau confirm()
+//  - Skor tim diambil dari integration v2.3 (identik dashboard:
+//    BBM + Kendaraan + Ruang + Kearsipan + SPJ + Monev)
+//  - Formula skor tim × 60% (maks 60 poin) sudah benar
+//  - Indikator loading skor tim per bulan di modal
+//  - Refresh skor tim: reset cache lalu fetch ulang
 // ============================================================
 (function () {
     'use strict';
 
-    var SECTION_ID      = 'penilaian-orang';
-    var DATA_KEY        = 'penilaian_orang_tw_v1';
-    var TEAM_CACHE_KEY  = 'penilaian_orang_team_cache_v1';
-    var DIKLAT_CACHE_KEY= 'penilaian_orang_diklat_cache_v1';
+    var SECTION_ID = 'penilaian-orang';
+    var DATA_KEY   = 'penilaian_orang_tw_v1';
+
+    // Bersihkan cache lama saat script load
+    (function clearOldCaches() {
+        try {
+            localStorage.removeItem('penilaian_orang_team_cache_v1');
+            localStorage.removeItem('penilaian_orang_diklat_cache_v1');
+        } catch (e) {}
+    })();
 
     function getGasUrl() {
         return (window.PPO_GAS_CONFIG && window.PPO_GAS_CONFIG.url)
@@ -49,9 +54,6 @@
         if (m <= 8) return 'TW III';
         return 'TW IV';
     }
-
-    var MONTHS = ['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI',
-                  'JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER'];
 
     var UNITS = [
         'Sekretariat','Bidang Koperasi','Bidang UKM',
@@ -217,44 +219,49 @@
     }
     function getCurrentYearString() { return String(new Date().getFullYear()); }
 
-    // ── DIKLAT CACHE ──
-    function saveDiklatCache(scores) {
-        try { localStorage.setItem(DIKLAT_CACHE_KEY, JSON.stringify({ scores: scores, timestamp: Date.now() })); }
-        catch (e) {}
-    }
-    function loadDiklatCache() {
-        try {
-            var raw = JSON.parse(localStorage.getItem(DIKLAT_CACHE_KEY) || 'null');
-            if (!raw || !raw.scores) return null;
-            if (Date.now() - (raw.timestamp || 0) > 3600000) return null;
-            return raw.scores;
-        } catch (e) { return null; }
-    }
+    // ── DIKLAT ────────────────────────────────────────────────────
     function fetchDiklatScores() {
         if (window.diklatGetMasterData) {
             var md = window.diklatGetMasterData();
-            if (md && md.length > 0) return Promise.resolve(_buildDiklatMap(md));
+            if (md && md.length > 0) {
+                console.log('[PPO-TW] Diklat: diklatGetMasterData(), jumlah:', md.length);
+                return Promise.resolve(_buildDiklatMap(md));
+            }
         }
-        var cached = loadDiklatCache();
-        if (cached) return Promise.resolve(cached);
         var urlOp = getOperasionalUrl();
-        if (!urlOp) return Promise.resolve({});
+        if (!urlOp) {
+            console.warn('[PPO-TW] Diklat: URL operasional kosong');
+            return Promise.resolve({});
+        }
+        console.log('[PPO-TW] Diklat: fetch dari GAS:', urlOp);
         return new Promise(function (resolve) {
             var cb = '__ppoDiklat_' + Date.now() + '_' + Math.floor(Math.random() * 99999);
             var done = false, script = document.createElement('script');
-            var timer = setTimeout(function () { if (done) return; cleanup(); resolve({}); }, 15000);
-            function cleanup() { done = true; clearTimeout(timer); try { delete window[cb]; } catch(e){} if (script.parentNode) script.parentNode.removeChild(script); }
+            var timer = setTimeout(function () {
+                if (done) return; cleanup();
+                console.warn('[PPO-TW] Diklat fetch timeout');
+                resolve({});
+            }, 15000);
+            function cleanup() {
+                done = true; clearTimeout(timer);
+                try { delete window[cb]; } catch(e){}
+                if (script.parentNode) script.parentNode.removeChild(script);
+            }
             window[cb] = function (data) {
                 cleanup();
+                console.log('[PPO-TW] Diklat response:', data && data.status, 'count:', data && data.diklat && data.diklat.length);
                 if (data && data.status === 'success' && Array.isArray(data.diklat)) {
-                    var scores = _buildDiklatMap(data.diklat); saveDiklatCache(scores); resolve(scores);
-                } else { resolve({}); }
+                    resolve(_buildDiklatMap(data.diklat));
+                } else {
+                    resolve({});
+                }
             };
             script.onerror = function () { if (done) return; cleanup(); resolve({}); };
             script.src = urlOp + '?action=getDiklat&callback=' + cb;
             document.head.appendChild(script);
         });
     }
+
     function _buildDiklatMap(diklatList) {
         var KEYS = ['triwulan1','triwulan2','triwulan3','triwulan4'];
         var map = {};
@@ -272,10 +279,6 @@
         return map;
     }
 
-    /**
-     * getDiklatValue — mengembalikan 10 (sudah upload) atau 0 (belum)
-     * Flat, bukan skala 7–10.
-     */
     function getDiklatValue(personName) {
         if (!state.diklatLoaded) return null;
         var key = (personName || '').toLowerCase().trim();
@@ -283,38 +286,69 @@
     }
 
     // ══════════════════════════════════════════════════════════
-    // SKOR TIM — Kalkulasi rata-rata 3 bulan per TW
+    // SKOR TIM
+    // Diambil dari integration v2.3 yang memanggil semua API
+    // operasional identik dengan dashboard, kemudian rata-rata
+    // 3 bulan per triwulan. Skor tim × 0.60 = maks 60 poin.
     // ══════════════════════════════════════════════════════════
-    function loadAllMonthlyTeamScores() {
-        var result = {};
-        try {
-            var raw = JSON.parse(localStorage.getItem(TEAM_CACHE_KEY) || '{}');
-            Object.keys(raw).forEach(function (m) {
-                result[m] = (raw[m] && raw[m].scores) ? raw[m].scores : {};
-            });
-        } catch (e) {}
-        return result;
+
+    function normalizeUnitKey(s) {
+        return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    }
+
+    function findUnitScoreInMonth(monthScores, unitName) {
+        if (!monthScores || typeof monthScores !== 'object') return null;
+        var targetNorm = normalizeUnitKey(unitName);
+        var exactKey = Object.keys(monthScores).find(function(k) {
+            return normalizeUnitKey(k) === targetNorm;
+        });
+        if (exactKey) return monthScores[exactKey];
+        var partialKey = Object.keys(monthScores).find(function(k) {
+            var kNorm = normalizeUnitKey(k);
+            return kNorm.indexOf(targetNorm) !== -1 || targetNorm.indexOf(kNorm) !== -1;
+        });
+        if (partialKey) return monthScores[partialKey];
+        return null;
     }
 
     function calcTWTeamScores(twKey) {
         var months = TRIWULAN_DEF[twKey].months;
         var result = {};
+
         UNITS.forEach(function (unit) {
             var vals = [];
             months.forEach(function (m) {
                 var msc = state.teamScoresByMonth[m];
-                if (msc && msc[unit] !== undefined && msc[unit] !== null) {
-                    var total = parseFloat(
-                        msc[unit].total !== undefined ? msc[unit].total :
-                        _sumComponents(msc[unit])
-                    );
-                    if (!isNaN(total)) vals.push(total);
+                if (!msc) {
+                    console.log('[PPO-TW] calcTWTeamScores: bulan', m, 'tidak ada');
+                    return;
+                }
+                var unitData = findUnitScoreInMonth(msc, unit);
+                if (!unitData) {
+                    console.log('[PPO-TW] calcTWTeamScores: unit', unit, 'tidak ditemukan di bulan', m,
+                        '| Keys:', Object.keys(msc));
+                    return;
+                }
+                // unitData bisa berupa { total, bbm, kendaraan, ... } atau angka langsung
+                var total;
+                if (typeof unitData === 'number') {
+                    total = unitData;
+                } else if (unitData.total !== undefined) {
+                    total = parseFloat(unitData.total);
+                } else {
+                    total = _sumComponents(unitData);
+                }
+                if (!isNaN(total)) {
+                    console.log('[PPO-TW] calcTWTeamScores:', unit, m, '→', total);
+                    vals.push(total);
                 }
             });
             result[unit] = vals.length
                 ? +(vals.reduce(function (a, b) { return a + b; }, 0) / vals.length).toFixed(2)
                 : null;
         });
+
+        console.log('[PPO-TW] calcTWTeamScores result for', twKey, ':', result);
         return result;
     }
 
@@ -331,25 +365,43 @@
         });
     }
 
-    function getTeamScore(unit) {
+    // Skor tim mentah (rata-rata TW), SEBELUM dikali bobot
+    function getTeamScoreRaw(unit) {
         var twSc = state.teamScoresByTW[state.tw];
         if (!twSc) return null;
         var v = twSc[unit];
         return (v !== null && v !== undefined && !isNaN(v)) ? v : null;
     }
 
-    // ── JSONP ──
+    // Bobot tim = skor_raw × 0.60 (maks 60 poin dari total 100)
+    function getTeamScoreWeighted(unit) {
+        var raw = getTeamScoreRaw(unit);
+        return raw !== null ? +(raw * 0.60).toFixed(2) : null;
+    }
+
+    // Alias agar kode lama tetap berjalan (kembalikan skor RAW)
+    function getTeamScore(unit) { return getTeamScoreRaw(unit); }
+
+    // ── JSONP ──────────────────────────────────────────────────────
     function gasJsonp(params) {
         return new Promise(function (resolve, reject) {
             var gasUrl = getGasUrl();
             if (!gasUrl) { reject(new Error('URL GAS belum diatur')); return; }
             var cb = '__ppoGas_' + Date.now() + '_' + Math.floor(Math.random() * 9999);
             var done = false, script = document.createElement('script');
-            var timeout = setTimeout(function () { if (done) return; cleanup(); reject(new Error('Timeout 20 detik')); }, 20000);
-            function cleanup() { done = true; clearTimeout(timeout); try { delete window[cb]; } catch(e){} if (script.parentNode) script.parentNode.removeChild(script); }
+            var timeout = setTimeout(function () {
+                if (done) return; cleanup(); reject(new Error('Timeout 20 detik'));
+            }, 20000);
+            function cleanup() {
+                done = true; clearTimeout(timeout);
+                try { delete window[cb]; } catch(e){}
+                if (script.parentNode) script.parentNode.removeChild(script);
+            }
             window[cb] = function (data) { cleanup(); resolve(data); };
             script.onerror = function () { if (done) return; cleanup(); reject(new Error('Network error')); };
-            var qs = Object.keys(params || {}).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); }).join('&');
+            var qs = Object.keys(params || {}).map(function (k) {
+                return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+            }).join('&');
             script.src = gasUrl + '?' + qs + '&callback=' + cb;
             document.head.appendChild(script);
         });
@@ -366,7 +418,6 @@
 
     function mapGasRecordToLocal(rec) {
         var criteria = (rec.criteria && typeof rec.criteria === 'object') ? rec.criteria : {};
-        // Diklat dari GAS: 0 atau 10
         var diklatFromGas = parseFloat(rec.diklat) || 0;
         diklatFromGas = diklatFromGas >= 5 ? 10 : 0;
         var skorTim  = parseFloat(rec.skorTim) || 0;
@@ -392,22 +443,35 @@
         setLoadingState(true);
         var tw = state.tw, tahun = getCurrentYearString();
 
+        state.teamScoresByMonth = {};
+        state.teamScoresByTW = {};
+
         var pDiklat = fetchDiklatScores().then(function (scores) {
-            state.diklatScores = scores || {}; state.diklatLoaded = true;
-        }).catch(function () { state.diklatLoaded = true; });
+            state.diklatScores = scores || {};
+            state.diklatLoaded = true;
+            console.log('[PPO-TW] Diklat loaded, jumlah pegawai:', Object.keys(state.diklatScores).length);
+        }).catch(function (e) {
+            console.error('[PPO-TW] Diklat fetch error:', e);
+            state.diklatLoaded = true;
+        });
 
         var pTeam = _fetchMonthlyTeamScoresForTW(tw).then(function () {
             rebuildTWTeamScores();
-            _updateAutoLoadStatus('Skor tim triwulan berhasil dihitung', 'success');
-        }).catch(function () {
-            state.teamScoresByMonth = loadAllMonthlyTeamScores();
-            rebuildTWTeamScores();
-            _updateAutoLoadStatus('Menggunakan cache lokal untuk skor tim', 'warning');
+            var twSc = state.teamScoresByTW[tw] || {};
+            var hasData = Object.values(twSc).some(function(v){ return v !== null; });
+            if (hasData) {
+                _updateAutoLoadStatus('Skor tim triwulan berhasil dihitung', 'success');
+            } else {
+                _updateAutoLoadStatus('Skor tim belum ada untuk ' + tw + ' — cek data di dashboard', 'warning');
+            }
+        }).catch(function (e) {
+            console.error('[PPO-TW] Team score fetch error:', e);
+            _updateAutoLoadStatus('Gagal mengambil skor tim dari server', 'error');
         });
 
-        // Fetch penilaian TW dari GAS — action: getAllPenilaianTW, param: tw (bukan bulan)
         var pData = gasJsonp({ action: 'getAllPenilaianTW', tw: tw, tahun: tahun })
             .then(function (res) {
+                console.log('[PPO-TW] getAllPenilaianTW response:', res && res.status, 'total:', res && res.total);
                 if (res && res.status === 'success' && Array.isArray(res.records)) {
                     if (!state.records[tw]) state.records[tw] = {};
                     res.records.forEach(function (rec) {
@@ -423,40 +487,50 @@
             });
 
         return Promise.all([pDiklat, pTeam, pData]).finally(function () {
-            setLoadingState(false); render();
+            setLoadingState(false);
+            render();
         });
     }
 
-    function _fetchMonthlyTeamScoresForTW(tw) {
-        var months = TRIWULAN_DEF[tw].months;
-        var tahun  = getCurrentYearString();
+    // SESUDAH — fetch semua 12 bulan sekaligus
+function _fetchMonthlyTeamScoresForTW(tw) {
+    // Kumpulkan semua bulan unik dari semua TW (= 12 bulan)
+    var allMonths = [];
+    TW_KEYS.forEach(function (twKey) {
+        TRIWULAN_DEF[twKey].months.forEach(function (m) {
+            if (allMonths.indexOf(m) === -1) allMonths.push(m);
+        });
+    });
 
-        if (window.PPO_GAS_CONFIG && window.PPO_GAS_CONFIG.fetchAllTeamScores) {
-            var promises = months.map(function (m) {
-                return window.PPO_GAS_CONFIG.fetchAllTeamScores(m)
-                    .then(function (scores) { state.teamScoresByMonth[m] = scores || {}; })
-                    .catch(function () {
-                        var cached = loadAllMonthlyTeamScores();
-                        state.teamScoresByMonth[m] = cached[m] || {};
-                    });
-            });
-            return Promise.all(promises);
-        }
+    console.log('[PPO-TW] _fetchMonthlyTeamScoresForTW: fetch semua bulan', allMonths);
 
-        var promises2 = months.map(function (m) {
-            return gasJsonp({ action: 'getTeamScores', bulan: m, tahun: tahun })
-                .then(function (res) {
-                    if (res && res.status === 'success' && res.scores) {
-                        state.teamScoresByMonth[m] = res.scores;
-                    }
+    if (window.PPO_GAS_CONFIG && window.PPO_GAS_CONFIG.fetchAllTeamScores) {
+        var promises = allMonths.map(function (m) {
+            // Skip bulan yang sudah ada di cache state (tidak perlu re-fetch)
+            if (state.teamScoresByMonth[m] &&
+                Object.keys(state.teamScoresByMonth[m]).length > 0) {
+                console.log('[PPO-TW] Skip fetch (cache hit):', m);
+                return Promise.resolve();
+            }
+            return window.PPO_GAS_CONFIG.fetchAllTeamScores(m)
+                .then(function (scores) {
+                    console.log('[PPO-TW] Team scores for', m, ':', scores);
+                    state.teamScoresByMonth[m] = scores || {};
                 })
-                .catch(function () {
-                    var cached = loadAllMonthlyTeamScores();
-                    state.teamScoresByMonth[m] = cached[m] || {};
+                .catch(function (e) {
+                    console.error('[PPO-TW] fetchAllTeamScores error for', m, ':', e);
+                    state.teamScoresByMonth[m] = {};
                 });
         });
-        return Promise.all(promises2);
+        return Promise.all(promises);
     }
+
+    // Fallback langsung
+    allMonths.forEach(function (m) {
+        if (!state.teamScoresByMonth[m]) state.teamScoresByMonth[m] = {};
+    });
+    return Promise.resolve();
+}
 
     function _updateAutoLoadStatus(msg, type) {
         var el  = document.getElementById('ppo-status-msg');
@@ -477,21 +551,16 @@
             : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Refresh';
     }
 
-    // ── SAVE / DELETE GAS ──
-    /**
-     * saveToGAS — PERBAIKAN: kirim 'tw', bukan 'bulan'
-     * Diklat: 0 atau 10 (flat)
-     */
+    // ── SAVE / DELETE GAS ──────────────────────────────────────────
     function saveToGAS(personPid, rec) {
         var found = findPersonByPid(personPid);
         if (!found) return Promise.reject(new Error('Pegawai tidak ditemukan: ' + personPid));
 
-        // Pastikan diklat hanya 0 atau 10
         var diklatToSend = (rec.diklat >= 5) ? 10 : 0;
 
         var payload = {
             action: 'savePenilaianTW',
-            tw: state.tw,                    // ← 'tw' bukan 'bulan'
+            tw: state.tw,
             tahun: getCurrentYearString(),
             gid: found.group.id,
             penilai: found.group.evaluator,
@@ -541,6 +610,38 @@
         });
     }
 
+    // ── DELETE dari toolbar tabel ─────────────────────────────────
+    function deleteRecord(personPid) {
+        var found = findPersonByPid(personPid);
+        if (!found) return;
+
+        var personName = found.person.name;
+        var twLabel_   = twLabel(state.tw);
+
+        function doDelete() {
+            delRec(personPid);
+            if (window.showToast) showToast('Penilaian ' + personName.split(',')[0] + ' (' + twLabel_ + ') dihapus.', 'success');
+            render();
+            deleteFromGAS(personPid).catch(function (err) {
+                if (window.showToast) showToast('Lokal terhapus. Server gagal: ' + err.message, 'error');
+            });
+        }
+
+        if (window.showConfirmModal) {
+            showConfirmModal({
+                icon: '🗑️',
+                title: 'Hapus Penilaian?',
+                message: 'Data penilaian <strong>' + esc(personName) + '</strong> untuk <strong>' + esc(twLabel_) + '</strong> akan dihapus permanen.',
+                confirmText: 'Hapus',
+                confirmClass: 'btn-danger'
+            }, doDelete);
+        } else {
+            if (!confirm('Hapus penilaian ' + personName + ' (' + twLabel_ + ')?\n\nTindakan ini tidak dapat dibatalkan.')) return;
+            doDelete();
+        }
+    }
+    window.ppoDeleteRecord = deleteRecord;
+
     // ══════════════════════════════════════════════════════════
     // HELPERS
     // ══════════════════════════════════════════════════════════
@@ -573,7 +674,7 @@
         return map[unit] || unit;
     }
 
-    // ── AUTH ──
+    // ── AUTH ───────────────────────────────────────────────────────
     function getUser() {
         var u = null;
         if (window.AUTH && typeof AUTH.getUser === 'function') u = AUTH.getUser();
@@ -621,19 +722,8 @@
     }
 
     // ══════════════════════════════════════════════════════════
-    // KALKULASI — Formula utama
-    //
-    // calcAkhlak(criteria):
-    //   avg  = rata-rata 7 nilai AKHLAK (skala 7–10)
-    //   weighted = avg × 3  → maks 30 poin
-    //
-    // calcFinal(teamScore, akhlakAvg, diklat):
-    //   teamW   = teamScore × 0.60  → maks 60 poin
-    //   akhlakW = akhlakAvg × 3     → maks 30 poin
-    //   diklatW = diklat (0 atau 10) → maks 10 poin
-    //   total   = teamW + akhlakW + diklatW → maks 100
-    //
-    // getDiklatValue: 10 jika sudah upload, 0 jika belum (flat)
+    // KALKULASI
+    // Formula: Tim×0.60 + AkhlakAvg×3 + Diklat(0/10) = maks 100
     // ══════════════════════════════════════════════════════════
     function calcAkhlak(criteria) {
         var vals = AKHLAK.map(function (a) {
@@ -647,31 +737,29 @@
         };
     }
 
-    function calcFinal(teamScore, akhlakAvg, diklat) {
-        var t = parseFloat(teamScore)  || 0;   // 0–100
-        var a = parseFloat(akhlakAvg)  || 7;   // 7–10
-        var d = parseFloat(diklat)     || 0;   // 0 atau 10
-        // snap diklat ke 0/10 (jaga-jaga jika nilai antara masuk)
+    function calcFinal(teamScoreRaw, akhlakAvg, diklat) {
+        var t = parseFloat(teamScoreRaw)  || 0;
+        var a = parseFloat(akhlakAvg)     || 7;
+        var d = parseFloat(diklat)        || 0;
         d = d >= 5 ? 10 : 0;
-        var teamW   = +(t * 0.60).toFixed(2);  // maks 60
-        var akhlakW = +(a * 3).toFixed(2);      // maks 30
-        var diklatW = d;                         // 0 atau 10
+        var teamW   = +(t * 0.60).toFixed(2);   // maks 60 poin
+        var akhlakW = +(a * 3).toFixed(2);       // maks 30 poin
+        var diklatW = d;                          // 0 atau 10 poin
         var total   = +(teamW + akhlakW + diklatW).toFixed(2);
         return { teamW: teamW, akhlakW: akhlakW, diklatW: diklatW, total: total };
     }
 
     function statusOf(total) {
-        if (total >= 90) return { label:'Amat Baik',        cls:'ppo-s-great', color:'#15803D', bg:'#DCFCE7' };
-        if (total >= 80) return { label:'Baik',              cls:'ppo-s-good',  color:'#1D4ED8', bg:'#DBEAFE' };
-        if (total >= 70) return { label:'Cukup Baik',        cls:'ppo-s-fair',  color:'#B45309', bg:'#FEF3C7' };
-        return               { label:'Perlu Pembinaan',   cls:'ppo-s-low',   color:'#B91C1C', bg:'#FEE2E2' };
+        if (total >= 90) return { label:'Amat Baik',      cls:'ppo-s-great', color:'#15803D', bg:'#DCFCE7' };
+        if (total >= 80) return { label:'Baik',            cls:'ppo-s-good',  color:'#1D4ED8', bg:'#DBEAFE' };
+        if (total >= 70) return { label:'Cukup Baik',      cls:'ppo-s-fair',  color:'#B45309', bg:'#FEF3C7' };
+        return               { label:'Perlu Pembinaan', cls:'ppo-s-low',   color:'#B91C1C', bg:'#FEE2E2' };
     }
 
     function snap(personPid, personName, unit) {
         var rec = getRec(personPid), ts = getTeamScore(unit);
         var criteria = rec && rec.criteria ? rec.criteria : {};
         var akhlak   = calcAkhlak(criteria);
-        // Diklat: 0 atau 10 (flat)
         var diklatVal = getDiklatValue(personName);
         var diklat    = diklatVal !== null ? diklatVal
                         : (rec && rec.diklat != null ? (rec.diklat >= 5 ? 10 : 0) : 0);
@@ -717,6 +805,7 @@
     // SVG Icons
     var IC = {
         edit   : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+        trash  : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>',
         eye    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
         refresh: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>',
         search : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
@@ -797,7 +886,7 @@
             if (showEvalCol && p.gid !== lastGid) {
                 var grp = GROUPS.find(function(g){ return g.id === p.gid; });
                 if (grp) {
-                    html += '<tr class="ppo-group-hdr"><td colspan="10">' +
+                    html += '<tr class="ppo-group-hdr"><td colspan="11">' +
                         '<span class="ppo-group-hdr-label">' + esc(grp.evaluator) + '</span>' +
                         '<span class="ppo-group-hdr-unit">' + esc(grp.unitLabel) + '</span>' +
                         '</td></tr>';
@@ -805,10 +894,21 @@
                 lastGid = p.gid;
             }
 
+            // Tombol aksi
             var actionHtml = '<div class="ppo-actions">';
             if (canEdit) actionHtml += '<button onclick="ppoOpenModal(\'' + escJs(p.pid) + '\')" class="ppo-act-btn ppo-act-edit" title="' + (s.rec?'Edit':'Nilai') + '">' + IC.edit + '</button>';
             if (s.rec)   actionHtml += '<button onclick="ppoOpenModalView(\'' + escJs(p.pid) + '\')" class="ppo-act-btn ppo-act-view" title="Lihat">' + IC.eye + '</button>';
+            // Tombol DELETE — muncul bila ada record & user bisa edit
+            if (s.rec && canEdit) {
+                actionHtml += '<button onclick="ppoDeleteRecord(\'' + escJs(p.pid) + '\')" class="ppo-act-btn ppo-act-del" title="Hapus penilaian">' + IC.trash + '</button>';
+            }
             actionHtml += '</div>';
+
+            // Kolom skor tim dengan bobot
+            var tsBobot = s.ts !== null ? (s.ts * 0.60).toFixed(1) : '—';
+            var tsCell  = s.ts !== null
+                ? '<span class="ppo-ts-cell">' + ts + '<span class="ppo-ts-w">×60%=' + tsBobot + '</span></span>'
+                : '<span class="ppo-dim">—</span>';
 
             html +=
                 '<tr class="ppo-row">' +
@@ -819,7 +919,7 @@
                 '<span class="ppo-person-unit">' + esc(p.unit) + '</span></div></div></td>' +
                 '<td class="ppo-td-unit"><span class="ppo-unit-chip" style="background:' + pal.bg + ';color:' + pal.color + ';">' + esc(unitShort(p.unit)) + '</span></td>' +
                 (showEvalCol ? '<td class="ppo-td-eval">' + esc(p.evaluator.split(',')[0]) + '</td>' : '') +
-                '<td class="ppo-td-num' + (s.ts===null?' ppo-dim':'') + '">' + ts + '</td>' +
+                '<td class="ppo-td-num">' + tsCell + '</td>' +
                 '<td class="ppo-td-num' + (s.rec?'':' ppo-dim') + '">' + ak + '</td>' +
                 '<td class="ppo-td-dik">' + dkHtml + '</td>' +
                 '<td class="ppo-td-total' + (s.rec?' ppo-total-val':' ppo-dim') + '">' + tot + '</td>' +
@@ -827,7 +927,7 @@
                 '<td class="ppo-td-action">' + actionHtml + '</td>' +
                 '</tr>';
         });
-        if (!html) html = '<tr><td colspan="10" class="ppo-empty">Tidak ada data yang sesuai filter.</td></tr>';
+        if (!html) html = '<tr><td colspan="11" class="ppo-empty">Tidak ada data yang sesuai filter.</td></tr>';
         tbody.innerHTML = html;
 
         if (mobileList) {
@@ -845,12 +945,14 @@
                     '<span class="ppo-status-badge" style="background:' + s.status.bg + ';color:' + s.status.color + ';">' + s.status.label + '</span></div>' +
                     '<div class="ppo-mcard-scores">' +
                     '<div class="ppo-mscore"><div class="ppo-mscore-label">Tim (rata TW)</div><div class="ppo-mscore-val">' + ts + '</div></div>' +
+                    '<div class="ppo-mscore"><div class="ppo-mscore-label">Tim ×60%</div><div class="ppo-mscore-val">' + (s.ts!==null?(s.ts*0.60).toFixed(1):'—') + '</div></div>' +
                     '<div class="ppo-mscore"><div class="ppo-mscore-label">AKHLAK</div><div class="ppo-mscore-val">' + (s.rec?s.akhlak.avg.toFixed(1):'—') + '</div></div>' +
                     '<div class="ppo-mscore"><div class="ppo-mscore-label">Diklat</div><div class="ppo-mscore-val">' + (s.diklatLoaded?(s.diklat===10?'10':'0'):'···') + '</div></div>' +
                     '<div class="ppo-mscore ppo-mscore-total"><div class="ppo-mscore-label">Nilai Akhir</div><div class="ppo-mscore-val ppo-mscore-big">' + tot + '</div></div></div>' +
                     '<div class="ppo-mcard-actions">' +
                     (canEdit ? '<button onclick="ppoOpenModal(\'' + escJs(p.pid) + '\')" class="ppo-mbtn ppo-mbtn-edit">' + IC.edit + (s.rec?' Edit Penilaian':' Mulai Nilai') + '</button>' : '') +
                     (s.rec   ? '<button onclick="ppoOpenModalView(\'' + escJs(p.pid) + '\')" class="ppo-mbtn ppo-mbtn-view">' + IC.eye + ' Lihat Detail</button>' : '') +
+                    (s.rec && canEdit ? '<button onclick="ppoDeleteRecord(\'' + escJs(p.pid) + '\')" class="ppo-mbtn ppo-mbtn-del">' + IC.trash + ' Hapus</button>' : '') +
                     '</div></div>';
             });
             if (!mHtml) mHtml = '<div class="ppo-empty" style="padding:40px;text-align:center;">Tidak ada data.</div>';
@@ -936,46 +1038,53 @@
 
         var rec      = getRec(personPid);
         var criteria = rec && rec.criteria ? rec.criteria : {};
-        // Diklat: 0 atau 10
         var diklatVal = getDiklatValue(person.name);
         var diklat    = diklatVal !== null ? diklatVal
                         : (rec && rec.diklat != null ? (rec.diklat >= 5 ? 10 : 0) : 0);
         var ts       = getTeamScore(person.unit);
+        var tsW      = ts !== null ? +(ts * 0.60).toFixed(2) : null;
         var akhlak   = calcAkhlak(criteria);
         var final    = calcFinal(ts, akhlak.avg, diklat);
         var sts      = rec ? statusOf(final.total) : { label:'Belum Dinilai', color:'#6B7280', bg:'#F3F4F6' };
         var pal      = unitPalette(person.unit);
         var ini      = initials(person.name);
 
-        // TW team breakdown per bulan
         var twMonths = TRIWULAN_DEF[state.tw].months;
         var tsBreakdownHtml = '<div class="ppo-ts-breakdown">' +
             twMonths.map(function (m) {
                 var msc = state.teamScoresByMonth[m];
-                var unitSc = msc && msc[person.unit];
-                var val = unitSc ? parseFloat(unitSc.total !== undefined ? unitSc.total : _sumComponents(unitSc)) : null;
+                var unitData = msc ? findUnitScoreInMonth(msc, person.unit) : null;
+                var val = null;
+                if (unitData !== null) {
+                    if (typeof unitData === 'number') val = unitData;
+                    else if (unitData.total !== undefined) val = parseFloat(unitData.total);
+                    else val = _sumComponents(unitData);
+                }
                 var pct = (val !== null && !isNaN(val)) ? Math.round(val) : 0;
+                var w   = (val !== null && !isNaN(val)) ? (val * 0.60).toFixed(1) : '—';
                 return '<div class="ppo-ts-br-row">' +
                     '<span class="ppo-ts-br-label">' + m.slice(0,3) + '</span>' +
                     '<div class="ppo-ts-br-bar"><div style="width:' + pct + '%"></div></div>' +
                     '<span class="ppo-ts-br-val">' + (val !== null && !isNaN(val) ? val.toFixed(1) : '—') +
-                    '<span class="ppo-ts-br-max">/100</span></span></div>';
+                    '<span class="ppo-ts-br-max">/100</span></span>' +
+                    '<span class="ppo-ts-br-w" title="×60%">→' + w + '</span>' +
+                    '</div>';
             }).join('') +
-            '<div class="ppo-ts-br-row" style="border-top:1px solid #E2E8F0;margin-top:4px;padding-top:4px;">' +
+            '<div class="ppo-ts-br-row ppo-ts-br-total">' +
             '<span class="ppo-ts-br-label" style="font-weight:700;">Rata</span>' +
-            '<div class="ppo-ts-br-bar"><div style="width:' + (ts !== null ? Math.round(ts) : 0) + '%"></div></div>' +
+            '<div class="ppo-ts-br-bar"><div style="width:' + (ts !== null ? Math.round(ts) : 0) + '%;background:#3B82F6"></div></div>' +
             '<span class="ppo-ts-br-val" style="font-weight:700;">' + (ts !== null ? ts.toFixed(1) : '—') +
-            '<span class="ppo-ts-br-max">/100</span></span></div>' +
+            '<span class="ppo-ts-br-max">/100</span></span>' +
+            '<span class="ppo-ts-br-w" style="font-weight:700;">→' + (tsW !== null ? tsW.toFixed(1) : '—') + '</span>' +
+            '</div>' +
             '</div>';
 
-        // Diklat chip
         var diklatChip = !state.diklatLoaded
             ? '<span class="ppo-chip-loading">Memuat...</span>'
             : (diklat === 10
                 ? '<span class="ppo-chip-yes">Sudah upload diklat → +10 poin</span>'
                 : '<span class="ppo-chip-no">Belum upload diklat → +0 poin</span>');
 
-        // AKHLAK rows
         var akhlakHTML = AKHLAK.map(function (a) {
             var v = parseFloat(criteria[a.key]) || 7; v = Math.min(10, Math.max(7, v));
             var LABELS = { 7:'Kurang', 8:'Cukup Baik', 9:'Baik', 10:'Amat Baik' };
@@ -998,11 +1107,10 @@
             'padding:2px 10px;border-radius:20px;background:#EFF6FF;color:#1D4ED8;margin-left:8px;">' +
             state.tw + ' · ' + twShort(state.tw) + '</span>';
 
-        // Info bobot (tampilkan di modal agar penilai paham)
         var bobotInfo = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">' +
-            '<span style="font-size:11px;padding:2px 8px;border-radius:20px;background:#EFF6FF;color:#1D4ED8;font-weight:600;">Tim 60% (maks 60 poin)</span>' +
-            '<span style="font-size:11px;padding:2px 8px;border-radius:20px;background:#F3E8FF;color:#7E22CE;font-weight:600;">AKHLAK 30% (maks 30 poin)</span>' +
-            '<span style="font-size:11px;padding:2px 8px;border-radius:20px;background:#DCFCE7;color:#15803D;font-weight:600;">Diklat 10 poin</span>' +
+            '<span style="font-size:11px;padding:2px 8px;border-radius:20px;background:#EFF6FF;color:#1D4ED8;font-weight:600;">Tim ×60% (maks 60 poin)</span>' +
+            '<span style="font-size:11px;padding:2px 8px;border-radius:20px;background:#F3E8FF;color:#7E22CE;font-weight:600;">AKHLAK ×3 (maks 30 poin)</span>' +
+            '<span style="font-size:11px;padding:2px 8px;border-radius:20px;background:#DCFCE7;color:#15803D;font-weight:600;">Diklat 0/10 poin</span>' +
             '</div>';
 
         box.innerHTML =
@@ -1016,39 +1124,34 @@
 
             '<div class="ppo-mbody">' +
 
-            // LEFT
             '<div class="ppo-mcol-left">' +
             '<div class="ppo-mc-section-title">Komponen Penilaian</div>' +
             bobotInfo +
 
-            // Skor Tim
             '<div class="ppo-comp-card">' +
             '<div class="ppo-comp-hdr">' +
             '<div class="ppo-comp-label">Skor Tim <small style="font-weight:400;color:#9CA3AF;">(rata-rata ' + state.tw + ')</small></div>' +
             '<div class="ppo-comp-weight">× 0.60 → maks 60 poin</div></div>' +
             '<div class="ppo-comp-body">' +
             '<div class="ppo-comp-score">' + (ts !== null ? ts.toFixed(1) : '—') + '</div>' +
-            '<div class="ppo-comp-detail">× 0.60 = <strong>' + (ts !== null ? (ts*0.60).toFixed(1) : '—') + '</strong> poin</div></div>' +
+            '<div class="ppo-comp-detail">× 0.60 = <strong>' + (tsW !== null ? tsW.toFixed(1) : '—') + '</strong> poin</div></div>' +
             tsBreakdownHtml +
             (!isReadOnly ? '<div class="ppo-ts-btns"><button class="ppo-ts-btn-refresh" onclick="ppoRefreshTWTeamScore(\'' + escJs(person.unit) + '\')">' + IC.refresh + ' Perbarui Skor Tim</button></div>' +
-            '<div id="ppo-ts-fetch-status" class="ppo-ts-status">Skor tim = rata-rata 3 bulan dalam ' + state.tw + '</div>' : '') +
+            '<div id="ppo-ts-fetch-status" class="ppo-ts-status">Skor tim = rata-rata 3 bulan dalam ' + state.tw + ', kemudian dikali 60%.</div>' : '') +
             '</div>' +
 
-            // AKHLAK
             '<div class="ppo-comp-card">' +
             '<div class="ppo-comp-hdr"><div class="ppo-comp-label">BerAKHLAK</div><div class="ppo-comp-weight">Rata × 3 → maks 30 poin</div></div>' +
             '<div class="ppo-comp-body"><div class="ppo-comp-score" id="ppo-prev-akhlak-w">' + akhlak.weighted.toFixed(2) + '</div>' +
             '<div class="ppo-comp-detail">Rata-rata <span id="ppo-prev-akhlak-avg">' + akhlak.avg.toFixed(2) + '</span> × 3</div></div>' +
             '</div>' +
 
-            // Diklat
             '<div class="ppo-comp-card">' +
             '<div class="ppo-comp-hdr"><div class="ppo-comp-label">Diklat ' + IC.lock + '</div><div class="ppo-comp-weight">0 atau 10 poin · otomatis</div></div>' +
             '<div class="ppo-comp-body"><div class="ppo-comp-score" style="color:' + (diklat===10?'#15803D':'#B91C1C') + ';">' + diklat + '</div>' +
             '<div class="ppo-comp-detail">' + diklatChip + '</div></div>' +
             '</div>' +
 
-            // Total
             '<div class="ppo-total-card" id="ppo-total-card" style="border-color:' + sts.color + '20;background:' + sts.bg + ';">' +
             '<div class="ppo-total-label" style="color:' + sts.color + ';">Nilai Akhir /100</div>' +
             '<div class="ppo-total-score" id="ppo-prev-total" style="color:' + sts.color + ';">' + (rec?final.total.toFixed(1):'—') + '</div>' +
@@ -1058,7 +1161,6 @@
             (rec?'<div class="ppo-updated">Diperbarui ' + new Date(rec.updatedAt).toLocaleString('id-ID') + ' oleh ' + esc(rec.updatedBy||'Admin') + '</div>':'') +
             '</div>' +
 
-            // RIGHT — AKHLAK form
             '<div class="ppo-mcol-right">' +
             '<div class="ppo-mc-section-title">Penilaian BerAKHLAK — ' + twLabel(state.tw) + '</div>' +
             (!isReadOnly ? '<div class="ppo-preset-bar"><span>Isi semua nilai:</span>' +
@@ -1070,7 +1172,7 @@
             '</div>' +
 
             '<div class="ppo-mfooter">' +
-            (!isReadOnly && rec ? '<button class="ppo-mfbtn ppo-mfbtn-danger" onclick="ppoResetModal()">Reset</button>' : '') +
+            (!isReadOnly && rec ? '<button class="ppo-mfbtn ppo-mfbtn-danger" onclick="ppoResetModal()">Reset Data</button>' : '') +
             '<div style="flex:1"></div>' +
             '<button class="ppo-mfbtn ppo-mfbtn-ghost" onclick="ppoCloseModal()">' + (isReadOnly?'Tutup':'Batal') + '</button>' +
             (!isReadOnly ? '<button class="ppo-mfbtn ppo-mfbtn-primary" onclick="ppoSaveModal()" id="ppo-save-btn">Simpan Penilaian</button>' : '') +
@@ -1121,6 +1223,10 @@
     function refreshTWTeamScore(unit) {
         var statusEl = document.getElementById('ppo-ts-fetch-status');
         if (statusEl) statusEl.textContent = 'Mengambil skor tim dari server...';
+        // Reset cache & refetch
+        try { localStorage.removeItem('penilaian_orang_team_cache_v1'); } catch(e) {}
+        state.teamScoresByMonth = {};
+        state.teamScoresByTW = {};
         _fetchMonthlyTeamScoresForTW(state.tw).then(function () {
             rebuildTWTeamScores();
             if (statusEl) statusEl.textContent = 'Skor tim diperbarui. Tutup & buka kembali untuk melihat rincian terbaru.';
@@ -1137,7 +1243,6 @@
         if (!found) return;
         var criteria = {};
         document.querySelectorAll('#ppo-modal-box [data-key]').forEach(function(sel){ criteria[sel.dataset.key] = parseFloat(sel.value)||7; });
-        // Diklat: 0 atau 10
         var diklatVal = getDiklatValue(found.person.name);
         var diklat = diklatVal !== null ? diklatVal : 0;
         var ts = getTeamScore(found.person.unit);
@@ -1151,7 +1256,7 @@
             tw: state.tw, gid: found.group.id, evaluator: found.group.evaluator,
             name: found.person.name, unit: found.person.unit,
             criteria: criteria,
-            diklat: diklat,           // 0 atau 10
+            diklat: diklat,
             teamScore: ts !== null ? ts : 0,
             summary: final,
             updatedAt: new Date().toISOString(),
@@ -1177,6 +1282,8 @@
     function resetModal() {
         if (!_activePid || _modalReadOnly) return;
         var pidToDelete = _activePid;
+        var found = findPersonByPid(pidToDelete);
+        var personName = found ? found.person.name : '';
         function doDelete() {
             delRec(pidToDelete);
             if (window.showToast) showToast('Data penilaian direset.','success');
@@ -1184,7 +1291,11 @@
             deleteFromGAS(pidToDelete).catch(function(err){ if (window.showToast) showToast('Lokal terhapus. Server gagal: '+err.message,'error'); });
         }
         if (window.showConfirmModal) {
-            showConfirmModal({ icon:'🗑️', title:'Reset Penilaian?', message:'Data '+twLabel(state.tw)+' ini akan dihapus permanen.', confirmText:'Reset', confirmClass:'btn-danger' }, doDelete);
+            showConfirmModal({
+                icon:'🗑️', title:'Reset Penilaian?',
+                message:'Data penilaian <strong>'+esc(personName)+'</strong> untuk <strong>'+esc(twLabel(state.tw))+'</strong> akan dihapus permanen.',
+                confirmText:'Reset', confirmClass:'btn-danger'
+            }, doDelete);
         } else {
             if (!confirm('Reset data penilaian '+twLabel(state.tw)+'?')) return;
             doDelete();
@@ -1199,7 +1310,7 @@
         _activePid = null; _modalReadOnly = false;
     }
 
-    // ── EXPOSE GLOBAL ──
+    // ── EXPOSE GLOBAL ──────────────────────────────────────────────
     window.ppoOpenModal           = openModal;
     window.ppoOpenModalView       = openModalView;
     window.ppoCloseModal          = closeModal;
@@ -1223,15 +1334,15 @@
     window.ppoSwitchTab = switchTab;
 
     // ══════════════════════════════════════════════════════════
-    // STYLES (sama dengan v6.0, tidak berubah)
+    // STYLES
     // ══════════════════════════════════════════════════════════
-    var STYLE_ID = 'ppo-styles-v6';
+    var STYLE_ID = 'ppo-styles-v63';
     function injectStyles() {
         if (document.getElementById(STYLE_ID)) return;
         var s = document.createElement('style');
         s.id = STYLE_ID;
         s.textContent = `
-/* ─── PPO v6.1 ─── */
+/* ─── PPO v6.3 ─── */
 #section-penilaian-orang{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','DM Sans',sans-serif;}
 #section-penilaian-orang *{box-sizing:border-box;}
 @keyframes ppospn{to{transform:rotate(360deg);}}
@@ -1287,10 +1398,13 @@
 .ppo-td-dik{text-align:center;}
 .ppo-td-total{text-align:center;font-family:'SF Mono',ui-monospace,monospace;}
 .ppo-td-status{white-space:nowrap;}
-.ppo-td-action{width:80px;}
+.ppo-td-action{width:100px;}
 .ppo-td-center{text-align:center;}
 .ppo-total-val{font-size:15px;font-weight:700;color:#0F172A;}
 .ppo-dim{color:#D1D5DB;}
+/* Skor tim dengan bobot */
+.ppo-ts-cell{display:flex;flex-direction:column;align-items:center;gap:1px;}
+.ppo-ts-w{font-size:10px;font-weight:500;color:#3B82F6;background:#EFF6FF;padding:1px 5px;border-radius:4px;white-space:nowrap;}
 .ppo-avatar{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;letter-spacing:.01em;}
 .ppo-avatar-sm{width:28px;height:28px;font-size:10px;}
 .ppo-avatar-lg{width:40px;height:40px;font-size:13px;border-radius:10px;}
@@ -1312,6 +1426,8 @@
 .ppo-act-edit:hover{background:#FEF3C7;border-color:#FCD34D;}
 .ppo-act-view{background:#EFF6FF;color:#2563EB;border-color:#BFDBFE;}
 .ppo-act-view:hover{background:#DBEAFE;}
+.ppo-act-del{background:#FEF2F2;color:#B91C1C;border-color:#FECACA;}
+.ppo-act-del:hover{background:#FEE2E2;border-color:#FCA5A5;}
 .ppo-empty{text-align:center;padding:40px;color:#9CA3AF;font-size:13px;}
 .ppo-rekap-card{background:white;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;}
 .ppo-rekap-card table{width:100%;border-collapse:collapse;font-size:13px;}
@@ -1328,7 +1444,7 @@
 .ppo-rank-score{font-size:20px;font-weight:700;color:#1E293B;font-family:'SF Mono',ui-monospace,monospace;min-width:50px;text-align:right;}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(3px);z-index:9999;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;}
 .modal-overlay.open{display:flex;}
-#ppo-modal-box{background:white;border-radius:16px;width:100%;max-width:900px;margin:auto;border:1px solid #E2E8F0;overflow:hidden;}
+#ppo-modal-box{background:white;border-radius:16px;width:100%;max-width:920px;margin:auto;border:1px solid #E2E8F0;overflow:hidden;}
 .ppo-mhdr{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #F1F5F9;gap:12px;}
 .ppo-mhdr-person{display:flex;align-items:center;gap:12px;}
 .ppo-mhdr-name{font-size:15px;font-weight:700;color:#0F172A;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
@@ -1348,12 +1464,14 @@
 .ppo-comp-score{font-size:28px;font-weight:700;color:#1E293B;font-family:'SF Mono',ui-monospace,monospace;line-height:1;}
 .ppo-comp-detail{font-size:12px;color:#6B7280;}
 .ppo-ts-breakdown{margin-top:8px;display:flex;flex-direction:column;gap:4px;}
-.ppo-ts-br-row{display:flex;align-items:center;gap:7px;}
-.ppo-ts-br-label{font-size:11.5px;color:#6B7280;width:36px;flex-shrink:0;}
+.ppo-ts-br-row{display:flex;align-items:center;gap:6px;}
+.ppo-ts-br-total{border-top:1px solid #E2E8F0;margin-top:4px;padding-top:4px;}
+.ppo-ts-br-label{font-size:11.5px;color:#6B7280;width:32px;flex-shrink:0;}
 .ppo-ts-br-bar{flex:1;height:4px;background:#E2E8F0;border-radius:2px;overflow:hidden;}
-.ppo-ts-br-bar div{height:100%;background:#3B82F6;border-radius:2px;}
+.ppo-ts-br-bar div{height:100%;background:#94A3B8;border-radius:2px;}
 .ppo-ts-br-val{font-size:11.5px;font-weight:600;color:#374151;font-family:monospace;min-width:38px;text-align:right;}
 .ppo-ts-br-max{color:#9CA3AF;font-weight:400;}
+.ppo-ts-br-w{font-size:11px;color:#3B82F6;min-width:44px;text-align:right;font-family:monospace;}
 .ppo-ts-btns{display:flex;gap:6px;margin-top:10px;}
 .ppo-ts-btn-refresh{flex:1;padding:7px 10px;border-radius:8px;border:1px solid #D1FAE5;background:#F0FDF4;color:#15803D;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px;}
 .ppo-ts-status{font-size:11px;color:#6B7280;margin-top:5px;font-style:italic;}
@@ -1395,16 +1513,17 @@
 .ppo-mcard-info{flex:1;min-width:0;}
 .ppo-mcard-name{font-size:14px;font-weight:700;color:#1E293B;line-height:1.3;}
 .ppo-mcard-unit{font-size:12px;color:#6B7280;margin-top:2px;}
-.ppo-mcard-scores{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;padding:10px;background:#F8FAFC;border-radius:8px;}
+.ppo-mcard-scores{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px;padding:10px;background:#F8FAFC;border-radius:8px;}
 .ppo-mscore{text-align:center;}
-.ppo-mscore-label{font-size:10.5px;color:#94A3B8;font-weight:500;}
-.ppo-mscore-val{font-size:14px;font-weight:700;color:#374151;font-family:monospace;}
+.ppo-mscore-label{font-size:10px;color:#94A3B8;font-weight:500;}
+.ppo-mscore-val{font-size:13px;font-weight:700;color:#374151;font-family:monospace;}
 .ppo-mscore-total .ppo-mscore-val{color:#1E293B;}
-.ppo-mscore-big{font-size:18px!important;}
+.ppo-mscore-big{font-size:17px!important;}
 .ppo-mcard-actions{display:flex;gap:7px;}
-.ppo-mbtn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid transparent;font-family:inherit;}
+.ppo-mbtn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid transparent;font-family:inherit;}
 .ppo-mbtn-edit{background:#FFF7ED;color:#B45309;border-color:#FED7AA;}
 .ppo-mbtn-view{background:#EFF6FF;color:#2563EB;border-color:#BFDBFE;}
+.ppo-mbtn-del{background:#FEF2F2;color:#B91C1C;border-color:#FECACA;}
 @media(max-width:900px){.ppo-mbody{grid-template-columns:1fr;max-height:none;}.ppo-mcol-left{border-right:none;border-bottom:1px solid #F1F5F9;}}
 @media(max-width:768px){.ppo-stat-grid{grid-template-columns:repeat(2,1fr);}.ppo-tbl-wrap{display:none;}.ppo-mobile-list{display:block;}.ppo-header{flex-direction:column;gap:12px;}.ppo-header-right{width:100%;}.ppo-filter-bar{flex-direction:column;}.ppo-search-box{width:100%;}.ppo-mfooter{flex-direction:column;}.ppo-mfbtn{width:100%;justify-content:center;}.ppo-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;}.ppo-tab{white-space:nowrap;font-size:12.5px;padding:8px 14px;}}
 `;
@@ -1449,12 +1568,19 @@
             '<div><h1 class="ppo-title">Penilaian Per Orang</h1><p class="ppo-subtitle">' + heroSub + '</p></div>',
             '</div>',
             '<div class="ppo-header-right">',
-            '<button class="ppo-btn ppo-btn-ghost" onclick="(function(){window._ppoState.diklatLoaded=false;window._ppoState.diklatScores={};try{localStorage.removeItem(\''+DIKLAT_CACHE_KEY+'\');}catch(e){}return window.ppoLoadFromGAS();})()" title="Refresh data diklat">'+IC.refresh+' Diklat</button>',
+            '<button class="ppo-btn ppo-btn-ghost" onclick="(function(){window._ppoState.diklatLoaded=false;window._ppoState.diklatScores={};return window.ppoLoadFromGAS();})()" title="Refresh data diklat">'+IC.refresh+' Diklat</button>',
             '<button id="ppo-btn-refresh" class="ppo-btn ppo-btn-primary" onclick="window.ppoLoadFromGAS()">' + IC.refresh + ' Refresh</button>',
             '</div>',
             '</div>',
             '<div style="margin-bottom:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#9CA3AF;">Pilih Periode Triwulan:</div>',
             '<div class="ppo-tw-pills">' + twPills + '</div>',
+            // Keterangan formula
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">',
+            '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:#EFF6FF;color:#1D4ED8;font-weight:600;">Tim ×60% (maks 60 poin)</span>',
+            '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:#F3E8FF;color:#7E22CE;font-weight:600;">AKHLAK ×3 (maks 30 poin)</span>',
+            '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:#DCFCE7;color:#15803D;font-weight:600;">Diklat 0 atau 10 poin</span>',
+            '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:#F1F5F9;color:#475569;font-weight:600;">Total maks 100</span>',
+            '</div>',
             '<div class="ppo-stat-grid" id="ppo-stat-grid"></div>',
             '<div class="ppo-tabs">',
             '<button class="ppo-tab active" onclick="ppoSwitchTab(\'daftar\',this)">Daftar Pegawai</button>',
@@ -1463,7 +1589,7 @@
             '<div id="ppo-panel-daftar">',
             '<div class="ppo-status-bar">',
             '<div class="ppo-status-dot" id="ppo-status-dot"></div>',
-            '<span id="ppo-status-msg">Skor tim = rata-rata 3 bulan dalam triwulan aktif. Diklat dimuat otomatis (0 atau 10 poin).</span>',
+            '<span id="ppo-status-msg">Mengambil skor tim dari server...</span>',
             '</div>',
             '<div class="ppo-filter-bar">',
             '<div class="ppo-search-box">',
@@ -1486,10 +1612,10 @@
             '<table id="ppo-main-table"><thead><tr>',
             '<th>#</th><th>Nama Pegawai</th><th>Unit</th>',
             '<th id="ppo-col-evaluator">Penilai</th>',
-            '<th class="tc">Tim (TW)</th>',
+            '<th class="tc">Tim (raw → ×60%)</th>',
             '<th class="tc">AKHLAK</th>',
             '<th class="tc">Diklat</th>',
-            '<th class="tc">Total</th>',
+            '<th class="tc">Total /100</th>',
             '<th class="tc">Status</th>',
             '<th></th>',
             '</tr></thead><tbody id="ppo-tbody"></tbody></table>',
@@ -1524,16 +1650,27 @@
     window.ppoSetTW = function (tw, btn) {
         if (!TRIWULAN_DEF[tw]) return;
         state.tw = tw;
-        document.querySelectorAll('#section-' + SECTION_ID + ' .ppo-tw-pill').forEach(function(b){ b.classList.remove('active'); });
+        document.querySelectorAll('#section-' + SECTION_ID + ' .ppo-tw-pill')
+            .forEach(function (b) { b.classList.remove('active'); });
         if (btn) btn.classList.add('active');
+
+        // Jangan reset teamScoresByMonth — data sudah ada dari fetch sebelumnya
+        // Cukup rebuild skor TW dari data yang sudah ada
         rebuildTWTeamScores();
         render();
-        loadFromGAS();
+
+        // Hanya re-fetch jika data bulan TW ini belum ada sama sekali
+        var twMonths = TRIWULAN_DEF[tw].months;
+        var hasData = twMonths.some(function (m) {
+            return state.teamScoresByMonth[m] &&
+                Object.keys(state.teamScoresByMonth[m]).length > 0;
+        });
+        if (!hasData) {
+            loadFromGAS();
+        }
     };
 
-    // ══════════════════════════════════════════════════════════
-    // SECTION INIT
-    // ══════════════════════════════════════════════════════════
+    // ── SECTION INIT ──────────────────────────────────────────────
     window.sectionInits = window.sectionInits || {};
     window.sectionInits[SECTION_ID] = function () {
         state.currentUser = getUser();
@@ -1542,6 +1679,7 @@
             if (ROLE_TO_GID[role]) state.currentUser.gid = ROLE_TO_GID[role];
             else { var dg = deriveGidFromUser(state.currentUser); if (dg) state.currentUser.gid = dg; }
         }
+
         loadRecords();
         injectStyles();
         buildShell();
@@ -1549,16 +1687,6 @@
         window._ppoState  = state;
         window._ppoRender = render;
         window._ppoMonthLabel = twLabel;
-
-        state.teamScoresByMonth = loadAllMonthlyTeamScores();
-        rebuildTWTeamScores();
-
-        var cachedDiklat = loadDiklatCache();
-        if (cachedDiklat) {
-            state.diklatScores = cachedDiklat;
-            state.diklatLoaded = true;
-            _updateAutoLoadStatus('Dari cache lokal — menyinkronisasi...', 'warning');
-        }
 
         render();
         setTimeout(function () { loadFromGAS(); }, 200);
